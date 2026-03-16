@@ -1,8 +1,8 @@
 import { join } from "path";
 import { runCommand } from "../primitives/runner.js";
 import { createPullRequest, commentOnIssue } from "./github.js";
-import type { GitHubIssue, StormConfig } from "./types.js";
-import { log } from "./output.js";
+import type { GitHubIssue, StormConfig, AgentUsage } from "./types.js";
+import { log, formatDuration } from "./output.js";
 import { CONFIG_DIR, PR_DESCRIPTION_FILE } from "./constants.js";
 
 export function slugify(text: string): string {
@@ -140,11 +140,39 @@ async function buildPRDescription(
     .replace(/\{\{\s*branch\s*\}\}/g, branch);
 }
 
+function formatPRComment(
+  model: string,
+  usage: AgentUsage,
+  durationMs: number
+): string {
+  const totalTokens = usage.inputTokens + usage.outputTokens;
+  const fmt = (n: number) => n.toLocaleString("en-US");
+
+  return [
+    "## Storm Agent Summary",
+    "",
+    `| | |`,
+    `|---|---|`,
+    `| **Model** | \`${model}\` |`,
+    `| **Duration** | ${formatDuration(durationMs)} |`,
+    `| **Total tokens** | ${fmt(totalTokens)} |`,
+    `| **Input tokens** | ${fmt(usage.inputTokens)} |`,
+    `| **Output tokens** | ${fmt(usage.outputTokens)} |`,
+    ...(usage.cacheReadTokens > 0
+      ? [`| **Cache read tokens** | ${fmt(usage.cacheReadTokens)} |`]
+      : []),
+    ...(usage.cacheCreationTokens > 0
+      ? [`| **Cache creation tokens** | ${fmt(usage.cacheCreationTokens)} |`]
+      : []),
+  ].join("\n");
+}
+
 export async function openPR(
   config: StormConfig,
   issue: GitHubIssue,
   branch: string,
-  cwd: string
+  cwd: string,
+  stats?: { model: string; usage: AgentUsage; durationMs: number }
 ): Promise<string | null> {
   try {
     const body = await buildPRDescription(issue, branch, config.github.baseBranch, cwd);
@@ -160,6 +188,14 @@ export async function openPR(
       issue.number,
       `Pull request created: ${pr.url}`
     );
+
+    if (stats) {
+      await commentOnIssue(
+        config.github.repo,
+        pr.number,
+        formatPRComment(stats.model, stats.usage, stats.durationMs)
+      );
+    }
 
     return pr.url;
   } catch (err) {

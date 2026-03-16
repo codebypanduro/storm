@@ -1,4 +1,4 @@
-import type { StormConfig, AgentResult } from "./types.js";
+import type { StormConfig, AgentResult, AgentUsage } from "./types.js";
 import { STOP_MARKER } from "./constants.js";
 import { log } from "./output.js";
 
@@ -20,6 +20,7 @@ export async function spawnAgent(
 
   log.dim(`  $ ${config.agent.command} ${args.join(" ")}`);
 
+  const start = Date.now();
   const proc = Bun.spawn([config.agent.command, ...args], {
     cwd,
     stdin: "pipe",
@@ -39,6 +40,7 @@ export async function spawnAgent(
 
   // Read stdout line by line, parse stream-json
   let output = "";
+  let usage: AgentUsage | undefined;
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -58,6 +60,14 @@ export async function spawnAgent(
           const msg = JSON.parse(line);
           if (msg.type === "result") {
             output = msg.result || "";
+            if (msg.usage) {
+              usage = {
+                inputTokens: msg.usage.input_tokens ?? 0,
+                outputTokens: msg.usage.output_tokens ?? 0,
+                cacheReadTokens: msg.usage.cache_read_input_tokens ?? 0,
+                cacheCreationTokens: msg.usage.cache_creation_input_tokens ?? 0,
+              };
+            }
           } else if (msg.type === "assistant" && msg.message?.content) {
             for (const block of msg.message.content) {
               if (block.type === "tool_use") {
@@ -84,6 +94,7 @@ export async function spawnAgent(
   clearTimeout(timer);
 
   const done = output.includes(STOP_MARKER);
+  const durationMs = Date.now() - start;
 
-  return { output, exitCode, done, timedOut };
+  return { output, exitCode, done, timedOut, usage, durationMs };
 }

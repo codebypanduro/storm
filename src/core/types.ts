@@ -41,11 +41,20 @@ export interface PrimitiveEntry {
   filePath: string;
 }
 
+export interface AgentUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
 export interface AgentResult {
   output: string;
   exitCode: number;
   done: boolean;
   timedOut: boolean;
+  usage?: AgentUsage;
+  durationMs: number;
 }
 
 export interface CheckResult {
