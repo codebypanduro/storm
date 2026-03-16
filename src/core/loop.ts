@@ -111,7 +111,7 @@ export async function processIssue(
 
   // Create PR
   log.step("Creating pull request...");
-  const prUrl = await openPR(config, issue, branch);
+  const prUrl = await openPR(config, issue, branch, cwd);
 
   const elapsed = formatDuration(Date.now() - start);
   if (prUrl) {
@@ -219,7 +219,7 @@ async function processIssueInDir(
   const pushed = await commitAndPush(branch, issue, cwd);
   if (!pushed) return { success: false };
 
-  const prUrl = await openPR(config, issue, branch);
+  const prUrl = await openPR(config, issue, branch, cwd);
   const elapsed = formatDuration(Date.now() - start);
   log.issue(issue.number, prUrl ? `Done in ${elapsed}: ${prUrl}` : `Finished in ${elapsed}`);
 
