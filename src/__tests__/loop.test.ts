@@ -5,12 +5,15 @@ const mockCheckoutBase = mock(async () => true);
 const mockCreateBranch = mock(async () => true);
 const mockCommitAndPush = mock(async () => true);
 const mockOpenPR = mock(async () => "https://github.com/owner/repo/pull/1");
+const mockCheckoutExistingBranch = mock(async () => true);
+const mockMergeBaseBranch = mock(async () => ({ merged: true }));
 const mockSpawnAgent = mock(async () => ({ done: false, exitCode: 0 }));
 const mockRunChecks = mock(async () => ({ allPassed: true, failureSummary: "", results: [] }));
 const mockLoadContexts = mock(async () => new Map());
 const mockLoadInstructions = mock(async () => new Map());
 const mockDiscoverWorkflow = mock(async () => ({ body: "test workflow", name: "workflow" }));
 const mockResolveTemplate = mock(() => "resolved prompt");
+const mockResolveContinueTemplate = mock(() => "resolved continue prompt");
 
 mock.module("../core/pr.js", () => ({
   branchName: () => "storm/issue-1-test",
@@ -18,7 +21,8 @@ mock.module("../core/pr.js", () => ({
   createBranch: mockCreateBranch,
   commitAndPush: mockCommitAndPush,
   openPR: mockOpenPR,
-  checkoutExistingBranch: mock(async () => true),
+  checkoutExistingBranch: mockCheckoutExistingBranch,
+  mergeBaseBranch: mockMergeBaseBranch,
 }));
 
 mock.module("../core/agent.js", () => ({
@@ -44,7 +48,7 @@ mock.module("../primitives/discovery.js", () => ({
 
 mock.module("../core/resolver.js", () => ({
   resolveTemplate: mockResolveTemplate,
-  resolveContinueTemplate: mock(() => "resolved continue prompt"),
+  resolveContinueTemplate: mockResolveContinueTemplate,
 }));
 
 mock.module("../core/output.js", () => ({
@@ -64,8 +68,8 @@ mock.module("../core/github.js", () => ({
   commentOnIssue: mock(async () => {}),
 }));
 
-import { processIssue } from "../core/loop.js";
-import type { GitHubIssue, StormConfig } from "../core/types.js";
+import { processIssue, processContinue } from "../core/loop.js";
+import type { GitHubIssue, StormConfig, PRReviewContext } from "../core/types.js";
 
 const issue: GitHubIssue = {
   number: 1,
@@ -149,5 +153,59 @@ describe("processIssue — final checks gate", () => {
     const calls = mockResolveTemplate.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
     expect(calls).toHaveLength(2);
     expect(calls[1]![1]!.checkFailures).toBe("TypeScript errors found");
+  });
+});
+
+const prContext: PRReviewContext = {
+  prNumber: 1,
+  prTitle: "Test PR",
+  prBody: "Closes #1",
+  prBranch: "storm/issue-1-test",
+  baseBranch: "main",
+  diffSummary: "+ some changes",
+  reviews: [],
+  linkedIssue: issue,
+};
+
+describe("processContinue", () => {
+  beforeEach(() => {
+    mockSpawnAgent.mockReset();
+    mockRunChecks.mockReset();
+    mockResolveContinueTemplate.mockReset();
+    mockCheckoutExistingBranch.mockReset();
+    mockMergeBaseBranch.mockReset();
+    mockCommitAndPush.mockReset();
+    mockCheckoutExistingBranch.mockImplementation(async () => true);
+    mockMergeBaseBranch.mockImplementation(async () => ({ merged: true }));
+    mockCommitAndPush.mockImplementation(async () => true);
+    mockResolveContinueTemplate.mockImplementation(() => "continue prompt");
+    mockSpawnAgent.mockImplementation(async () => ({ done: true, exitCode: 0, usage: null, sessionId: null }));
+    mockRunChecks.mockImplementation(async () => ({ allPassed: true, failureSummary: "", results: [] }));
+  });
+
+  it("calls mergeBaseBranch after checkout", async () => {
+    await processContinue(prContext, config, "/tmp");
+    expect(mockMergeBaseBranch).toHaveBeenCalledTimes(1);
+    expect(mockMergeBaseBranch).toHaveBeenCalledWith("main", "/tmp");
+  });
+
+  it("succeeds when merge is clean", async () => {
+    const result = await processContinue(prContext, config, "/tmp");
+    expect(result.success).toBe(true);
+    expect(mockSpawnAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("continues when merge has conflicts", async () => {
+    mockMergeBaseBranch.mockImplementation(async () => ({
+      merged: false,
+      conflicts: {
+        conflictedFiles: ["src/index.ts"],
+        conflictDetails: "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> origin/main",
+      },
+    }));
+
+    const result = await processContinue(prContext, config, "/tmp");
+    expect(result.success).toBe(true);
+    expect(mockSpawnAgent).toHaveBeenCalledTimes(1);
   });
 });

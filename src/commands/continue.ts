@@ -3,7 +3,7 @@ import {
   fetchIssue,
   fetchPullRequest,
   fetchPRReviews,
-  fetchPRSessionId,
+  fetchPRCommentsAndSessionId,
 } from "../core/github.js";
 import { processContinue } from "../core/loop.js";
 import { resolveContinueTemplate } from "../core/resolver.js";
@@ -58,15 +58,16 @@ export async function continueCommand(
   }
   const issueNumber = parseInt(issueMatch[1], 10);
 
-  // Fetch issue, reviews, and session ID in parallel
-  const [issue, reviews, sessionId] = await Promise.all([
+  // Fetch issue, reviews, comments, and session ID in parallel
+  const [issue, reviews, { comments: prComments, sessionId }] = await Promise.all([
     fetchIssue(config.github.repo, issueNumber),
     fetchPRReviews(config.github.repo, prNumber),
-    fetchPRSessionId(config.github.repo, prNumber),
+    fetchPRCommentsAndSessionId(config.github.repo, prNumber),
   ]);
 
   log.info(`Linked issue: #${issueNumber} — ${issue.title}`);
   log.info(`Reviews: ${reviews.length} review(s)`);
+  log.info(`PR comments: ${prComments.length} comment(s)`);
   if (sessionId) {
     log.info(`Session ID: ${sessionId} (will resume)`);
   } else {
@@ -91,6 +92,7 @@ export async function continueCommand(
     reviews,
     linkedIssue: issue,
     sessionId,
+    comments: prComments,
   };
 
   if (dryRun) {
@@ -122,11 +124,17 @@ You are continuing work on a pull request. A reviewer has left feedback that nee
 ## Current Diff
 {{ pr.diff }}
 
+{{ conflicts }}
+
+## PR Comments
+{{ pr.comments }}
+
 ## Reviewer Feedback
 {{ pr.reviews }}
 
 ## Task
 Address the reviewer feedback above. Make the requested changes while maintaining code quality.
+If there are merge conflicts, resolve them by choosing the correct code and removing all conflict markers.
 When done, output %%STORM_DONE%% on its own line.
 
 {{ checks.failures }}

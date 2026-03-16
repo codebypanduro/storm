@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "bun run index.ts",
-    "test": "bun test",
+    "test": "bash -c 'for f in $(find src -name \"*.test.ts\"); do bun test \"$f\" || exit 1; done'",
     "typecheck": "bun tsc --noEmit"
   },
   "dependencies": {
