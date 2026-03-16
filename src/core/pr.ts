@@ -1,7 +1,7 @@
 import { join } from "path";
 import { runCommand, runCommandArgs } from "../primitives/runner.js";
 import { createPullRequest, commentOnIssue } from "./github.js";
-import type { GitHubIssue, StormConfig, AgentUsage } from "./types.js";
+import type { GitHubIssue, StormConfig, AgentUsage, ConflictInfo } from "./types.js";
 import { log, formatDuration } from "./output.js";
 import { CONFIG_DIR, PR_DESCRIPTION_FILE } from "./constants.js";
 
@@ -113,6 +113,43 @@ export async function checkoutExistingBranch(
   }
 
   return true;
+}
+
+export async function mergeBaseBranch(
+  baseBranch: string,
+  cwd: string
+): Promise<{ merged: boolean; conflicts?: ConflictInfo }> {
+  const fetch = await runCommandArgs(["git", "fetch", "origin", baseBranch], { cwd });
+  if (fetch.exitCode !== 0) {
+    log.warn(`Failed to fetch ${baseBranch}: ${fetch.stderr}`);
+    return { merged: false };
+  }
+
+  const merge = await runCommandArgs(["git", "merge", `origin/${baseBranch}`, "--no-edit"], { cwd });
+  if (merge.exitCode === 0) {
+    log.info(`Merged origin/${baseBranch} cleanly`);
+    return { merged: true };
+  }
+
+  // Check if the failure is due to merge conflicts
+  const conflictFiles = await runCommandArgs(["git", "diff", "--name-only", "--diff-filter=U"], { cwd });
+  const conflictedFiles = conflictFiles.stdout.trim().split("\n").filter(Boolean);
+
+  if (conflictedFiles.length === 0) {
+    log.error(`Merge failed (not a conflict): ${merge.stderr}`);
+    return { merged: false };
+  }
+
+  const conflictDiff = await runCommand("git diff", { cwd });
+  log.warn(`Merge conflicts detected in ${conflictedFiles.length} file(s): ${conflictedFiles.join(", ")}`);
+
+  return {
+    merged: false,
+    conflicts: {
+      conflictedFiles,
+      conflictDetails: conflictDiff.stdout,
+    },
+  };
 }
 
 async function buildPRDescription(

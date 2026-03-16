@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { execSync } from "child_process";
-import type { GitHubIssue, GeneratedIssue, PRReview, PRReviewComment } from "./types.js";
+import type { GitHubIssue, GeneratedIssue, PRReview, PRReviewComment, PRComment } from "./types.js";
 import { log } from "./output.js";
 
 let cachedToken: string | undefined;
@@ -315,26 +315,55 @@ export async function fetchPRSessionId(
   repoStr: string,
   prNumber: number
 ): Promise<string | undefined> {
+  const { sessionId } = await fetchPRCommentsAndSessionId(repoStr, prNumber);
+  return sessionId;
+}
+
+export async function fetchPRCommentsAndSessionId(
+  repoStr: string,
+  prNumber: number
+): Promise<{ comments: PRComment[]; sessionId?: string }> {
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const comments = await octokit.paginate(octokit.issues.listComments, {
+  const rawComments = await octokit.paginate(octokit.issues.listComments, {
     owner,
     repo,
     issue_number: prNumber,
     per_page: 100,
   });
 
-  const pattern = /<!-- storm:session_id=([a-f0-9-]+) -->/;
-  for (const comment of comments) {
-    const match = comment.body?.match(pattern);
-    if (match) return match[1];
+  const sessionPattern = /<!-- storm:session_id=([a-f0-9-]+) -->/;
+  const stormPattern = /<!-- storm:session_id=|^## Storm/;
+  let sessionId: string | undefined;
+
+  const prComments: PRComment[] = [];
+
+  for (const comment of rawComments) {
+    const body = comment.body ?? "";
+
+    // Extract session ID
+    const sessionMatch = body.match(sessionPattern);
+    if (sessionMatch) {
+      sessionId = sessionMatch[1];
+    }
+
+    // Filter out storm's own comments
+    if (stormPattern.test(body)) continue;
+
+    prComments.push({
+      author: comment.user?.login ?? "unknown",
+      body,
+      createdAt: comment.created_at,
+    });
   }
 
-  // Also check PR body
-  const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
-  const bodyMatch = pr.body?.match(pattern);
-  if (bodyMatch) return bodyMatch[1];
+  // Also check PR body for session ID
+  if (!sessionId) {
+    const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
+    const bodyMatch = pr.body?.match(sessionPattern);
+    if (bodyMatch) sessionId = bodyMatch[1];
+  }
 
-  return undefined;
+  return { comments: prComments, sessionId };
 }

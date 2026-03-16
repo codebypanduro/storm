@@ -7,7 +7,7 @@ import { resolveTemplate, resolveContinueTemplate } from "./resolver.js";
 import { spawnAgent } from "./agent.js";
 import { runChecks } from "./checks.js";
 import { commentOnIssue } from "./github.js";
-import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch } from "./pr.js";
+import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch, mergeBaseBranch } from "./pr.js";
 
 let stopRequested = false;
 
@@ -297,11 +297,17 @@ You are continuing work on a pull request. A reviewer has left feedback that nee
 ## Current Diff
 {{ pr.diff }}
 
+{{ conflicts }}
+
+## PR Comments
+{{ pr.comments }}
+
 ## Reviewer Feedback
 {{ pr.reviews }}
 
 ## Task
 Address the reviewer feedback above. Make the requested changes while maintaining code quality.
+If there are merge conflicts, resolve them by choosing the correct code and removing all conflict markers.
 When done, output %%STORM_DONE%% on its own line.
 
 {{ checks.failures }}
@@ -322,6 +328,12 @@ export async function processContinue(
   // Checkout existing branch
   if (!(await checkoutExistingBranch(branch, cwd))) {
     return { success: false };
+  }
+
+  // Merge base branch to detect conflicts
+  const mergeResult = await mergeBaseBranch(pr.baseBranch, cwd);
+  if (mergeResult.conflicts) {
+    pr.conflicts = mergeResult.conflicts;
   }
 
   let checkFailures = "";

@@ -84,6 +84,17 @@ export interface GeneratedIssue {
   labels: string[];
 }
 
+export interface ConflictInfo {
+  conflictedFiles: string[];
+  conflictDetails: string;
+}
+
+export interface PRComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface PRReviewContext {
   prNumber: number;
   prTitle: string;
@@ -94,6 +105,8 @@ export interface PRReviewContext {
   reviews: PRReview[];
   linkedIssue: GitHubIssue;
   sessionId?: string;
+  conflicts?: ConflictInfo;
+  comments?: PRComment[];
 }
 
 export interface PRReview {
