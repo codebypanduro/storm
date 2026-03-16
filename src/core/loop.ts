@@ -152,9 +152,9 @@ export async function processIssueInWorktree(
   const branch = branchName(issue);
 
   // Create worktree
-  const { runCommand } = await import("../primitives/runner.js");
-  const setup = await runCommand(
-    `git worktree add "${worktreeDir}" -b "${branch}" "${config.github.baseBranch}"`,
+  const { runCommandArgs } = await import("../primitives/runner.js");
+  const setup = await runCommandArgs(
+    ["git", "worktree", "add", worktreeDir, "-b", branch, config.github.baseBranch],
     { cwd: baseCwd }
   );
 
@@ -168,7 +168,7 @@ export async function processIssueInWorktree(
     return await processIssueInDir(issue, config, worktreeDir);
   } finally {
     // Cleanup worktree
-    await runCommand(`git worktree remove "${worktreeDir}" --force`, {
+    await runCommandArgs(["git", "worktree", "remove", worktreeDir, "--force"], {
       cwd: baseCwd,
     });
   }
