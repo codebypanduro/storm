@@ -6,7 +6,7 @@ Autonomous GitHub issue resolver powered by Claude Code. Fetches issues labeled 
 
 - [Bun](https://bun.sh) runtime
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
-- A GitHub personal access token with repo access
+- [GitHub CLI](https://cli.github.com/) (`gh`) authenticated, or a GitHub personal access token
 
 ## Installation
 
@@ -56,11 +56,23 @@ Edit `.storm/storm.json`:
 }
 ```
 
-### 3. Set your GitHub token
+### 3. Authenticate with GitHub
+
+Storm automatically detects your GitHub credentials. Use either option:
+
+**Option A: GitHub CLI (recommended)**
+
+```bash
+gh auth login
+```
+
+**Option B: Personal access token**
 
 ```bash
 export GITHUB_TOKEN=ghp_...
 ```
+
+If both are available, `GITHUB_TOKEN` takes priority.
 
 ## Usage
 
