@@ -1,4 +1,4 @@
-import type { GitHubIssue, StormConfig } from "./types.js";
+import type { GitHubIssue, StormConfig, AgentUsage } from "./types.js";
 import { log, formatDuration } from "./output.js";
 import { loadContexts } from "../primitives/context.js";
 import { loadInstructions } from "../primitives/instructions.js";
@@ -34,6 +34,7 @@ export async function processIssue(
   }
 
   let checkFailures = "";
+  const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
     if (stopRequested) {
@@ -66,6 +67,13 @@ export async function processIssue(
 
     // Spawn agent
     const result = await spawnAgent(prompt, config, { cwd });
+
+    if (result.usage) {
+      totalUsage.inputTokens += result.usage.inputTokens;
+      totalUsage.outputTokens += result.usage.outputTokens;
+      totalUsage.cacheReadTokens += result.usage.cacheReadTokens;
+      totalUsage.cacheCreationTokens += result.usage.cacheCreationTokens;
+    }
 
     if (result.timedOut) {
       log.error("Agent timed out");
@@ -111,9 +119,14 @@ export async function processIssue(
 
   // Create PR
   log.step("Creating pull request...");
-  const prUrl = await openPR(config, issue, branch, cwd);
+  const totalDurationMs = Date.now() - start;
+  const prUrl = await openPR(config, issue, branch, cwd, {
+    model: config.agent.model,
+    usage: totalUsage,
+    durationMs: totalDurationMs,
+  });
 
-  const elapsed = formatDuration(Date.now() - start);
+  const elapsed = formatDuration(totalDurationMs);
   if (prUrl) {
     log.success(`Done in ${elapsed}: ${prUrl}`);
   } else {
@@ -164,6 +177,7 @@ async function processIssueInDir(
   const { maxIterations, delay, stopOnError } = config.defaults;
 
   let checkFailures = "";
+  const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
     if (stopRequested) break;
@@ -190,6 +204,13 @@ async function processIssueInDir(
     });
 
     const result = await spawnAgent(prompt, config, { cwd });
+
+    if (result.usage) {
+      totalUsage.inputTokens += result.usage.inputTokens;
+      totalUsage.outputTokens += result.usage.outputTokens;
+      totalUsage.cacheReadTokens += result.usage.cacheReadTokens;
+      totalUsage.cacheCreationTokens += result.usage.cacheCreationTokens;
+    }
 
     if (result.timedOut) {
       log.error("Agent timed out");
@@ -219,8 +240,13 @@ async function processIssueInDir(
   const pushed = await commitAndPush(branch, issue, cwd);
   if (!pushed) return { success: false };
 
-  const prUrl = await openPR(config, issue, branch, cwd);
-  const elapsed = formatDuration(Date.now() - start);
+  const totalDurationMs = Date.now() - start;
+  const prUrl = await openPR(config, issue, branch, cwd, {
+    model: config.agent.model,
+    usage: totalUsage,
+    durationMs: totalDurationMs,
+  });
+  const elapsed = formatDuration(totalDurationMs);
   log.issue(issue.number, prUrl ? `Done in ${elapsed}: ${prUrl}` : `Finished in ${elapsed}`);
 
   return { success: !!prUrl, prUrl: prUrl || undefined };
