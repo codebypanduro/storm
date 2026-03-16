@@ -15,6 +15,10 @@ export async function updateCommand() {
 
   log.info("Updating storm-agent...");
 
+  // Reset any local changes so pull always succeeds
+  spawnSync("git", ["reset", "--hard", "HEAD"], { cwd: INSTALL_DIR, stdio: "inherit" });
+  spawnSync("git", ["clean", "-fd"], { cwd: INSTALL_DIR, stdio: "inherit" });
+
   const pull = spawnSync("git", ["pull"], { cwd: INSTALL_DIR, stdio: "inherit" });
   if (pull.status !== 0) {
     log.error("git pull failed");
