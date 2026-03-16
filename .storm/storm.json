@@ -1,0 +1,18 @@
+{
+  "github": {
+    "repo": "codebypanduro/storm",
+    "label": "storm",
+    "baseBranch": "main"
+  },
+  "agent": {
+    "command": "claude",
+    "args": ["-p", "--dangerously-skip-permissions"],
+    "model": "sonnet"
+  },
+  "defaults": {
+    "maxIterations": 10,
+    "delay": 2,
+    "stopOnError": false,
+    "parallel": false
+  }
+}
