@@ -32,8 +32,9 @@ program
   .command("run")
   .description("Process storm-labeled issues autonomously")
   .option("-i, --issue <number>", "Process a single issue by number", parseInt)
+  .option("--dry-run", "Preview issues and resolved prompts without executing")
   .action(async (options) => {
-    await runCommand(process.cwd(), { issue: options.issue });
+    await runCommand(process.cwd(), { issue: options.issue, dryRun: options.dryRun });
   });
 
 program

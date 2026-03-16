@@ -13,6 +13,6 @@
     "maxIterations": 10,
     "delay": 2,
     "stopOnError": false,
-    "parallel": false
+    "parallel": true
   }
 }
