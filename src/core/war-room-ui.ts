@@ -88,6 +88,8 @@ export class TuiRenderer implements WarRoomRenderer {
   private lastTool = "";
   private fallback: PlainRenderer | null = null;
   private resizeHandler: (() => void) | null = null;
+  private stdinHandler: ((data: Buffer) => void) | null = null;
+  private selectedAgentIndex = 0;
   private cols = 0;
   private rows = 0;
 
@@ -104,8 +106,8 @@ export class TuiRenderer implements WarRoomRenderer {
     this.session = session;
     this.events = [];
 
-    // Enter alternate screen, hide cursor
-    process.stdout.write("\x1b[?1049h\x1b[?25l");
+    // Enter alternate screen, hide cursor, clear screen
+    process.stdout.write("\x1b[?1049h\x1b[?25l\x1b[2J");
 
     this.resizeHandler = () => {
       this.cols = process.stdout.columns ?? 80;
@@ -113,6 +115,37 @@ export class TuiRenderer implements WarRoomRenderer {
       if (this.session) this.render();
     };
     process.stdout.on("resize", this.resizeHandler);
+
+    // Set up keyboard input for agent navigation
+    if (process.stdin.isTTY) {
+      this.stdinHandler = (data: Buffer) => {
+        const key = data.toString();
+        const agentCount = this.session?.agents.length ?? 0;
+        if (agentCount === 0) return;
+
+        let changed = false;
+        if (key === "j" || key === "\x1b[B") {
+          // Down
+          this.selectedAgentIndex = (this.selectedAgentIndex + 1) % agentCount;
+          changed = true;
+        } else if (key === "k" || key === "\x1b[A") {
+          // Up
+          this.selectedAgentIndex = (this.selectedAgentIndex - 1 + agentCount) % agentCount;
+          changed = true;
+        } else if (key >= "1" && key <= "9") {
+          const idx = parseInt(key, 10) - 1;
+          if (idx < agentCount) {
+            this.selectedAgentIndex = idx;
+            changed = true;
+          }
+        }
+
+        if (changed) this.render();
+      };
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.on("data", this.stdinHandler);
+    }
 
     this.addEvent({ type: "system", message: "War room started", timestamp: Date.now() });
     this.render();
@@ -122,6 +155,15 @@ export class TuiRenderer implements WarRoomRenderer {
     if (this.fallback) {
       this.fallback.destroy();
       return;
+    }
+
+    if (this.stdinHandler) {
+      process.stdin.off("data", this.stdinHandler);
+      this.stdinHandler = null;
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+      }
     }
 
     if (this.resizeHandler) {
@@ -231,7 +273,7 @@ export class TuiRenderer implements WarRoomRenderer {
     output += "\x1b[H";
 
     // Top border
-    output += pc.dim("┌─ Agents ") + pc.dim("─".repeat(LEFT_PANEL_WIDTH - 10)) + pc.dim("┬─ Events ") + pc.dim("─".repeat(Math.max(0, rightWidth - 10))) + pc.dim("┐") + "\n";
+    output += pc.dim("┌─ Agents ") + pc.dim("─".repeat(LEFT_PANEL_WIDTH - 10)) + pc.dim("┬─ Events ") + pc.dim("─".repeat(Math.max(0, rightWidth - 10))) + pc.dim("┐") + "\x1b[K\n";
 
     // Content rows
     const agentLines = this.buildAgentPanel(contentHeight);
@@ -240,22 +282,23 @@ export class TuiRenderer implements WarRoomRenderer {
     for (let i = 0; i < contentHeight; i++) {
       const left = (agentLines[i] ?? "").padEnd(LEFT_PANEL_WIDTH);
       const right = (eventLines[i] ?? "").padEnd(rightWidth);
-      output += pc.dim("│") + " " + truncate(left, LEFT_PANEL_WIDTH - 1) + pc.dim("│") + " " + truncate(right, rightWidth - 1) + pc.dim("│") + "\n";
+      output += pc.dim("│") + " " + truncate(left, LEFT_PANEL_WIDTH - 1) + pc.dim("│") + " " + truncate(right, rightWidth - 1) + pc.dim("│") + "\x1b[K\n";
     }
 
     // Status bar separator
-    output += pc.dim("├─ Status ") + pc.dim("─".repeat(LEFT_PANEL_WIDTH - 10)) + pc.dim("┴") + pc.dim("─".repeat(Math.max(0, rightWidth))) + pc.dim("┤") + "\n";
+    output += pc.dim("├─ Status ") + pc.dim("─".repeat(LEFT_PANEL_WIDTH - 10)) + pc.dim("┴") + pc.dim("─".repeat(Math.max(0, rightWidth))) + pc.dim("┤") + "\x1b[K\n";
 
     // Status bar content
     const elapsed = formatDuration(Date.now() - this.session.startTime);
     const agentName = this.activeAgent ? `${this.activeAgent.config.name} (${this.activeAgent.config.role})` : "—";
     const toolInfo = this.lastTool ? `[tool] ${this.lastTool}` : "";
-    const statusText = `Turn ${this.session.turn}/${this.session.maxTurns} | ${agentName} | ${toolInfo} | elapsed: ${elapsed}`;
+    const navHint = "[j/k] navigate";
+    const statusText = `Turn ${this.session.turn}/${this.session.maxTurns} | ${agentName} | ${toolInfo} | ${navHint} | elapsed: ${elapsed}`;
     const statusPadded = truncate(statusText, cols - 4).padEnd(cols - 4);
-    output += pc.dim("│") + " " + pc.cyan(statusPadded) + " " + pc.dim("│") + "\n";
+    output += pc.dim("│") + " " + pc.cyan(statusPadded) + " " + pc.dim("│") + "\x1b[K\n";
 
-    // Bottom border
-    output += pc.dim("└") + pc.dim("─".repeat(cols - 2)) + pc.dim("┘");
+    // Bottom border — no trailing \n, then clear everything below
+    output += pc.dim("└") + pc.dim("─".repeat(cols - 2)) + pc.dim("┘") + "\x1b[J";
 
     process.stdout.write(output);
   }
@@ -264,11 +307,24 @@ export class TuiRenderer implements WarRoomRenderer {
     if (!this.session) return [];
     const lines: string[] = [];
 
-    for (const agent of this.session.agents) {
+    for (let idx = 0; idx < this.session.agents.length; idx++) {
+      const agent = this.session.agents[idx];
       if (lines.length >= height) break;
       const isActive = this.activeAgent?.config.id === agent.config.id;
-      const prefix = isActive ? pc.green("> ") : "  ";
-      const name = isActive ? pc.bold(agent.config.name) : agent.config.name;
+      const isSelected = idx === this.selectedAgentIndex;
+
+      let prefix: string;
+      if (isActive && isSelected) {
+        prefix = pc.green("> ");
+      } else if (isActive) {
+        prefix = pc.green("> ");
+      } else if (isSelected) {
+        prefix = pc.cyan("* ");
+      } else {
+        prefix = "  ";
+      }
+
+      const name = isActive ? pc.bold(agent.config.name) : isSelected ? pc.cyan(agent.config.name) : agent.config.name;
       lines.push(`${prefix}${name} (${agent.config.role})`);
 
       if (lines.length >= height) break;
@@ -278,6 +334,14 @@ export class TuiRenderer implements WarRoomRenderer {
 
       if (lines.length >= height) break;
       lines.push(`  tools: ${agent.toolsUsed}`);
+
+      // Show last event for the selected agent
+      if (isSelected && lines.length < height) {
+        const lastEvent = [...this.events].reverse().find((e) => e.agent === agent.config.name);
+        if (lastEvent) {
+          lines.push(`  ${pc.dim(truncate(lastEvent.message, LEFT_PANEL_WIDTH - 4))}`);
+        }
+      }
 
       if (lines.length >= height) break;
       lines.push("");
