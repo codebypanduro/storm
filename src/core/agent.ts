@@ -11,6 +11,7 @@ export async function spawnAgent(
 
   const args = [
     ...config.agent.args,
+    "--verbose",
     "--output-format",
     "stream-json",
     "--model",

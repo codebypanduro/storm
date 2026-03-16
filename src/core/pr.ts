@@ -19,20 +19,21 @@ export async function createBranch(
   name: string,
   cwd: string
 ): Promise<boolean> {
-  // Try creating a new branch first
+  // Try creating a new branch
   const result = await runCommand(`git checkout -b "${name}"`, { cwd });
   if (result.exitCode === 0) return true;
 
-  // Branch already exists — check it out and reset to current HEAD
-  log.info(`Branch "${name}" already exists, resetting it`);
-  const checkout = await runCommand(`git checkout "${name}"`, { cwd });
-  if (checkout.exitCode !== 0) {
-    log.error(`Failed to checkout branch: ${checkout.stderr}`);
+  // Branch exists — delete it and recreate from current HEAD (base branch)
+  log.info(`Branch "${name}" already exists, recreating from base`);
+  const del = await runCommand(`git branch -D "${name}"`, { cwd });
+  if (del.exitCode !== 0) {
+    log.error(`Failed to delete branch: ${del.stderr}`);
     return false;
   }
-  const reset = await runCommand(`git reset --hard "${name}@{upstream}" 2>/dev/null || git reset --hard HEAD`, { cwd });
-  if (reset.exitCode !== 0) {
-    log.warn(`Could not reset branch: ${reset.stderr}`);
+  const retry = await runCommand(`git checkout -b "${name}"`, { cwd });
+  if (retry.exitCode !== 0) {
+    log.error(`Failed to create branch: ${retry.stderr}`);
+    return false;
   }
   return true;
 }
