@@ -1,16 +1,38 @@
 import { Octokit } from "@octokit/rest";
+import { execSync } from "child_process";
 import type { GitHubIssue, GeneratedIssue, PRReview, PRReviewComment } from "./types.js";
 import { log } from "./output.js";
 
-function getOctokit(): Octokit {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) {
-    log.error("GITHUB_TOKEN environment variable is not set.");
-    log.info("Create a token at https://github.com/settings/tokens");
-    log.info("Export it: export GITHUB_TOKEN=ghp_...");
-    process.exit(1);
+let cachedToken: string | undefined;
+
+function getGitHubToken(): string {
+  if (cachedToken) return cachedToken;
+
+  // 1. Check environment variable
+  if (process.env.GITHUB_TOKEN) {
+    cachedToken = process.env.GITHUB_TOKEN;
+    return cachedToken;
   }
-  return new Octokit({ auth: token });
+
+  // 2. Try gh CLI
+  try {
+    const token = execSync("gh auth token", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    if (token) {
+      cachedToken = token;
+      return cachedToken;
+    }
+  } catch {
+    // gh not installed or not authenticated
+  }
+
+  log.error("No GitHub token found.");
+  log.info("Either run: gh auth login");
+  log.info("Or export GITHUB_TOKEN=ghp_...");
+  process.exit(1);
+}
+
+function getOctokit(): Octokit {
+  return new Octokit({ auth: getGitHubToken() });
 }
 
 export function parseRepo(repo: string): { owner: string; repo: string } {

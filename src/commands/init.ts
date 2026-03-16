@@ -161,6 +161,6 @@ export async function initCommand(cwd: string) {
   log.info("");
   log.info("Storm initialized! Next steps:");
   log.info('  1. Set "repo" in .storm/storm.json (e.g. "owner/repo")');
-  log.info("  2. Export GITHUB_TOKEN=ghp_...");
+  log.info("  2. Run: gh auth login (or export GITHUB_TOKEN=ghp_...)");
   log.info("  3. Run: storm list");
 }
