@@ -1,4 +1,4 @@
-import { loadConfig } from "../core/config.js";
+import { loadConfig, validateConfig } from "../core/config.js";
 import { fetchLabeledIssues, fetchIssue } from "../core/github.js";
 import { processIssue, processIssueInWorktree, requestStop } from "../core/loop.js";
 import { log } from "../core/output.js";
@@ -18,8 +18,9 @@ export async function runCommand(
 
   const config = await loadConfig(cwd);
 
-  if (!config.github.repo) {
-    log.error('No repo configured. Set "repo" in .storm/storm.json');
+  const errors = validateConfig(config);
+  if (errors.length > 0) {
+    for (const err of errors) log.error(err);
     process.exit(1);
   }
 

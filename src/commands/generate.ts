@@ -1,5 +1,5 @@
 import { join } from "path";
-import { loadConfig } from "../core/config.js";
+import { loadConfig, validateConfig } from "../core/config.js";
 import { CONFIG_DIR, ISSUE_START_MARKER, ISSUE_END_MARKER } from "../core/constants.js";
 import { log } from "../core/output.js";
 import { spawnAgent } from "../core/agent.js";
@@ -51,8 +51,9 @@ export async function generateCommand(cwd: string, options: GenerateOptions = {}
 
   const config = await loadConfig(cwd);
 
-  if (!config.github.repo) {
-    log.error('No repo configured. Set "repo" in .storm/storm.json');
+  const errors = validateConfig(config);
+  if (errors.length > 0) {
+    for (const err of errors) log.error(err);
     process.exit(1);
   }
 

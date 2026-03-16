@@ -1,4 +1,4 @@
-import { loadConfig } from "../core/config.js";
+import { loadConfig, validateConfig } from "../core/config.js";
 import { fetchLabeledIssues } from "../core/github.js";
 import { log } from "../core/output.js";
 import pc from "picocolors";
@@ -6,8 +6,9 @@ import pc from "picocolors";
 export async function listCommand(cwd: string) {
   const config = await loadConfig(cwd);
 
-  if (!config.github.repo) {
-    log.error('No repo configured. Set "repo" in .storm/storm.json');
+  const errors = validateConfig(config);
+  if (errors.length > 0) {
+    for (const err of errors) log.error(err);
     process.exit(1);
   }
 
