@@ -131,3 +131,75 @@ export interface GlobalProject {
 export interface GlobalConfig {
   projects: GlobalProject[];
 }
+
+// War Room types
+
+export interface AgentConfig {
+  id: string;
+  name: string;
+  role: string;
+  personality: string;
+  kibble: number;
+  model?: string;
+}
+
+export interface WarRoomAgent {
+  config: AgentConfig;
+  kibbleRemaining: number;
+  toolsUsed: number;
+}
+
+export type WarRoomEventType =
+  | "system"
+  | "agent_start"
+  | "agent_end"
+  | "tool_use"
+  | "transfer"
+  | "error";
+
+export interface WarRoomEvent {
+  type: WarRoomEventType;
+  agent?: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface KibbleTransfer {
+  from: string;
+  to: string;
+  amount: number;
+}
+
+export interface WarRoomSession {
+  id: string;
+  task: string;
+  agents: WarRoomAgent[];
+  events: WarRoomEvent[];
+  turn: number;
+  maxTurns: number;
+  startTime: number;
+  issueNumber?: number;
+}
+
+export interface WarRoomOptions {
+  issue?: number;
+  prompt?: string;
+  agents?: string[];
+  dryRun?: boolean;
+  ui?: boolean;
+}
+
+export interface WarRoomRenderer {
+  init(session: WarRoomSession): void;
+  destroy(): void;
+  onTurnStart(session: WarRoomSession, agent: WarRoomAgent): void;
+  onTurnEnd(session: WarRoomSession, agent: WarRoomAgent): void;
+  onToolUse(session: WarRoomSession, agent: WarRoomAgent, toolName: string): void;
+  onEvent(session: WarRoomSession, event: WarRoomEvent): void;
+  onTransfer(session: WarRoomSession, transfer: KibbleTransfer): void;
+  onDone(session: WarRoomSession, agent: WarRoomAgent): void;
+  onTimeout(session: WarRoomSession, agent: WarRoomAgent): void;
+  onAllKibbleExhausted(session: WarRoomSession): void;
+  onAbort(session: WarRoomSession): void;
+  onComplete(session: WarRoomSession): void;
+}

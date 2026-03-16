@@ -10,3 +10,30 @@ export const INSTRUCTION_FILE = "INSTRUCTION.md";
 export const CONTEXT_FILE = "CONTEXT.md";
 export const PR_DESCRIPTION_FILE = "PR_DESCRIPTION.md";
 export const CONTINUE_FILE = "CONTINUE.md";
+
+// War Room constants
+export const AGENTS_DIR = "agents";
+export const AGENT_FILE = "AGENT.md";
+export const SESSIONS_DIR = "sessions";
+export const EVENTS_FILE = "events.jsonl";
+export const WAR_ROOM_NAME = "war-room";
+
+export const DEFAULT_KIBBLE = 20;
+export const MAX_WAR_ROOM_TURNS = 30;
+
+export const KIBBLE_TOOLS = new Set([
+  "bash",
+  "computer",
+  "text_editor",
+  "file",
+  "Read",
+  "Write",
+  "Edit",
+  "Bash",
+  "Glob",
+  "Grep",
+  "WebFetch",
+  "WebSearch",
+]);
+
+export const TRANSFER_KIBBLE_MARKER = "%%TRANSFER_KIBBLE";
