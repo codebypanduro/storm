@@ -29,6 +29,7 @@ mock.module("./pr.js", () => ({
   commitAndPush: mockCommitAndPush,
   openPR: mockOpenPR,
   checkoutExistingBranch: mockCheckoutExistingBranch,
+  mergeBaseBranch: mock(() => Promise.resolve({ merged: true })),
   branchName: mockBranchName,
 }));
 

@@ -7,27 +7,15 @@ import { resolveTemplate, resolveContinueTemplate } from "./resolver.js";
 import { spawnAgent } from "./agent.js";
 import { runChecks } from "./checks.js";
 import { commentOnIssue } from "./github.js";
-import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch } from "./pr.js";
+import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch, mergeBaseBranch } from "./pr.js";
 
-export async function processIssue(
+async function runIterationLoop(
   issue: GitHubIssue,
   config: StormConfig,
   cwd: string,
   signal?: AbortSignal
-): Promise<{ success: boolean; prUrl?: string }> {
-  const start = Date.now();
-  const branch = branchName(issue);
+): Promise<{ success: boolean; totalUsage: AgentUsage; lastSessionId?: string }> {
   const { maxIterations, delay, stopOnError } = config.defaults;
-
-  log.issue(issue.number, `Starting: ${issue.title}`);
-
-  // Checkout base and create branch
-  if (!(await checkoutBase(config.github.baseBranch, cwd))) {
-    return { success: false };
-  }
-  if (!(await createBranch(branch, cwd))) {
-    return { success: false };
-  }
 
   let checkFailures = "";
   let lastSessionId: string | undefined;
@@ -51,7 +39,7 @@ export async function processIssue(
 
     if (!workflow) {
       log.error("No WORKFLOW.md found in .storm/workflow/");
-      return { success: false };
+      return { success: false, totalUsage, lastSessionId };
     }
 
     // Resolve template
@@ -82,8 +70,16 @@ export async function processIssue(
     }
 
     if (result.done) {
-      log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      log.step("Running final checks...");
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      log.dim(`  Iteration ${iteration} took ${formatDuration(Date.now() - iterStart)}`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) {
@@ -110,6 +106,31 @@ export async function processIssue(
       await Bun.sleep(delay * 1000);
     }
   }
+
+  return { success: true, totalUsage, lastSessionId };
+}
+
+export async function processIssue(
+  issue: GitHubIssue,
+  config: StormConfig,
+  cwd: string,
+  signal?: AbortSignal
+): Promise<{ success: boolean; prUrl?: string }> {
+  const start = Date.now();
+  const branch = branchName(issue);
+
+  log.issue(issue.number, `Starting: ${issue.title}`);
+
+  // Checkout base and create branch
+  if (!(await checkoutBase(config.github.baseBranch, cwd))) {
+    return { success: false };
+  }
+  if (!(await createBranch(branch, cwd))) {
+    return { success: false };
+  }
+
+  const { success, totalUsage, lastSessionId } = await runIterationLoop(issue, config, cwd, signal);
+  if (!success) return { success: false };
 
   // Commit and push
   log.step("Committing and pushing...");
@@ -148,9 +169,9 @@ export async function processIssueInWorktree(
   const branch = branchName(issue);
 
   // Create worktree
-  const { runCommand } = await import("../primitives/runner.js");
-  const setup = await runCommand(
-    `git worktree add "${worktreeDir}" -b "${branch}" "${config.github.baseBranch}"`,
+  const { runCommandArgs } = await import("../primitives/runner.js");
+  const setup = await runCommandArgs(
+    ["git", "worktree", "add", worktreeDir, "-b", branch, config.github.baseBranch],
     { cwd: baseCwd }
   );
 
@@ -164,7 +185,7 @@ export async function processIssueInWorktree(
     return await processIssueInDir(issue, config, worktreeDir, signal);
   } finally {
     // Cleanup worktree
-    await runCommand(`git worktree remove "${worktreeDir}" --force`, {
+    await runCommandArgs(["git", "worktree", "remove", worktreeDir, "--force"], {
       cwd: baseCwd,
     });
   }
@@ -178,72 +199,9 @@ async function processIssueInDir(
 ): Promise<{ success: boolean; prUrl?: string }> {
   const start = Date.now();
   const branch = branchName(issue);
-  const { maxIterations, delay, stopOnError } = config.defaults;
 
-  let checkFailures = "";
-  let lastSessionId: string | undefined;
-  const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-
-  for (let iteration = 1; iteration <= maxIterations; iteration++) {
-    if (signal?.aborted) break;
-
-    log.issue(issue.number, `Iteration ${iteration}/${maxIterations}`);
-    const iterStart = Date.now();
-
-    const [contexts, instructions, workflow] = await Promise.all([
-      loadContexts(cwd),
-      loadInstructions(cwd),
-      discoverWorkflow(cwd),
-    ]);
-
-    if (!workflow) {
-      log.error("No WORKFLOW.md found");
-      return { success: false };
-    }
-
-    const prompt = resolveTemplate(workflow.body, {
-      issue,
-      contexts,
-      instructions,
-      checkFailures: checkFailures || undefined,
-    });
-
-    const result = await spawnAgent(prompt, config, { cwd });
-
-    if (result.sessionId) {
-      lastSessionId = result.sessionId;
-    }
-
-    if (result.usage) {
-      totalUsage.inputTokens += result.usage.inputTokens;
-      totalUsage.outputTokens += result.usage.outputTokens;
-      totalUsage.cacheReadTokens += result.usage.cacheReadTokens;
-      totalUsage.cacheCreationTokens += result.usage.cacheCreationTokens;
-    }
-
-    if (result.timedOut) {
-      log.error("Agent timed out");
-      if (stopOnError) break;
-    }
-
-    if (result.done) {
-      log.issue(issue.number, `Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
-    }
-
-    if (result.exitCode !== 0 && stopOnError) break;
-
-    const checkResults = await runChecks(cwd);
-    if (checkResults.allPassed) {
-      checkFailures = "";
-    } else {
-      checkFailures = checkResults.failureSummary;
-    }
-
-    if (iteration < maxIterations && delay > 0) {
-      await Bun.sleep(delay * 1000);
-    }
-  }
+  const { success, totalUsage, lastSessionId } = await runIterationLoop(issue, config, cwd, signal);
+  if (!success) return { success: false };
 
   // Commit and push
   const pushed = await commitAndPush(branch, issue, cwd);
@@ -280,11 +238,17 @@ You are continuing work on a pull request. A reviewer has left feedback that nee
 ## Current Diff
 {{ pr.diff }}
 
+{{ conflicts }}
+
+## PR Comments
+{{ pr.comments }}
+
 ## Reviewer Feedback
 {{ pr.reviews }}
 
 ## Task
 Address the reviewer feedback above. Make the requested changes while maintaining code quality.
+If there are merge conflicts, resolve them by choosing the correct code and removing all conflict markers.
 When done, output %%STORM_DONE%% on its own line.
 
 {{ checks.failures }}
@@ -306,6 +270,12 @@ export async function processContinue(
   // Checkout existing branch
   if (!(await checkoutExistingBranch(branch, cwd))) {
     return { success: false };
+  }
+
+  // Merge base branch to detect conflicts
+  const mergeResult = await mergeBaseBranch(pr.baseBranch, cwd);
+  if (mergeResult.conflicts) {
+    pr.conflicts = mergeResult.conflicts;
   }
 
   let checkFailures = "";
@@ -363,8 +333,16 @@ export async function processContinue(
     }
 
     if (result.done) {
-      log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      log.step("Running final checks...");
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      log.dim(`  Iteration ${iteration} took ${formatDuration(Date.now() - iterStart)}`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) {

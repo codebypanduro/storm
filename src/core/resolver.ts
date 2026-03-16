@@ -1,4 +1,4 @@
-import type { GitHubIssue, PRReviewContext, PRReview } from "./types.js";
+import type { GitHubIssue, PRReviewContext, PRReview, PRComment, ConflictInfo } from "./types.js";
 
 export function resolveGenerateTemplate(
   template: string,
@@ -105,6 +105,8 @@ export function resolveContinueTemplate(
   result = result.replace(/\{\{\s*pr\.body\s*\}\}/g, pr.prBody);
   result = result.replace(/\{\{\s*pr\.diff\s*\}\}/g, pr.diffSummary);
   result = result.replace(/\{\{\s*pr\.reviews\s*\}\}/g, formatReviews(pr.reviews));
+  result = result.replace(/\{\{\s*pr\.comments\s*\}\}/g, formatPRComments(pr.comments));
+  result = result.replace(/\{\{\s*conflicts\s*\}\}/g, formatConflicts(pr.conflicts));
 
   // Issue placeholders
   result = result.replace(/\{\{\s*issue\.number\s*\}\}/g, String(pr.linkedIssue.number));
@@ -163,6 +165,32 @@ function formatReviews(reviews: PRReview[]): string {
     }
     return lines.join("\n");
   }).join("\n\n---\n\n");
+}
+
+function formatPRComments(comments?: PRComment[]): string {
+  if (!comments || comments.length === 0) return "_No PR comments._";
+
+  return comments.map((c) => {
+    return `**@${c.author}** (${c.createdAt}):\n${c.body}`;
+  }).join("\n\n---\n\n");
+}
+
+function formatConflicts(conflicts?: ConflictInfo): string {
+  if (!conflicts) return "";
+
+  const lines: string[] = [
+    "## Merge Conflicts",
+    `The following files have merge conflicts that need to be resolved:`,
+    "",
+    ...conflicts.conflictedFiles.map((f) => `- \`${f}\``),
+    "",
+    "### Conflict Details",
+    "```diff",
+    conflicts.conflictDetails,
+    "```",
+  ];
+
+  return lines.join("\n");
 }
 
 function escapeRegex(str: string): string {

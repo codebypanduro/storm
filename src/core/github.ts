@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { execSync } from "child_process";
-import type { GitHubIssue, GeneratedIssue, PRReview, PRReviewComment } from "./types.js";
+import type { GitHubIssue, GeneratedIssue, PRReview, PRReviewComment, PRComment } from "./types.js";
 import { log } from "./output.js";
 
 let cachedToken: string | undefined;
@@ -51,7 +51,7 @@ export async function fetchLabeledIssues(
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const { data } = await octokit.issues.listForRepo({
+  const data = await octokit.paginate(octokit.issues.listForRepo, {
     owner,
     repo,
     labels: label,
@@ -154,6 +154,58 @@ export async function createIssue(
   return { number: data.number, url: data.html_url };
 }
 
+export async function findLinkedPR(
+  repoStr: string,
+  issueNumber: number
+): Promise<{ number: number; url: string } | null> {
+  const octokit = getOctokit();
+  const { owner, repo } = parseRepo(repoStr);
+
+  const { data: prs } = await octokit.pulls.list({
+    owner,
+    repo,
+    state: "open",
+    per_page: 100,
+  });
+
+  const pattern = new RegExp(`(?:closes|fixes|resolves)\\s+#${issueNumber}\\b`, "i");
+  for (const pr of prs) {
+    if (pr.body && pattern.test(pr.body)) {
+      return { number: pr.number, url: pr.html_url };
+    }
+  }
+
+  return null;
+}
+
+export async function findLinkedPRs(
+  repoStr: string,
+  issueNumbers: number[]
+): Promise<Map<number, { number: number; url: string }>> {
+  const octokit = getOctokit();
+  const { owner, repo } = parseRepo(repoStr);
+
+  const { data: prs } = await octokit.pulls.list({
+    owner,
+    repo,
+    state: "open",
+    per_page: 100,
+  });
+
+  const result = new Map<number, { number: number; url: string }>();
+  for (const pr of prs) {
+    if (!pr.body) continue;
+    for (const issueNumber of issueNumbers) {
+      const pattern = new RegExp(`(?:closes|fixes|resolves)\\s+#${issueNumber}\\b`, "i");
+      if (pattern.test(pr.body)) {
+        result.set(issueNumber, { number: pr.number, url: pr.html_url });
+      }
+    }
+  }
+
+  return result;
+}
+
 export async function listPullRequests(
   repoStr: string,
   head?: string
@@ -169,7 +221,7 @@ export async function listPullRequests(
   };
   if (head) params.head = `${owner}:${head}`;
 
-  const { data } = await octokit.pulls.list(params);
+  const data = await octokit.paginate(octokit.pulls.list, params);
 
   return data.map((pr) => ({
     number: pr.number,
@@ -208,9 +260,9 @@ export async function fetchPRReviews(
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const [{ data: reviews }, { data: comments }] = await Promise.all([
-    octokit.pulls.listReviews({ owner, repo, pull_number: prNumber, per_page: 100 }),
-    octokit.pulls.listReviewComments({ owner, repo, pull_number: prNumber, per_page: 100 }),
+  const [reviews, comments] = await Promise.all([
+    octokit.paginate(octokit.pulls.listReviews, { owner, repo, pull_number: prNumber, per_page: 100 }),
+    octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber, per_page: 100 }),
   ]);
 
   // Group comments by review ID, with top-level comments (no review) grouped separately
@@ -263,26 +315,55 @@ export async function fetchPRSessionId(
   repoStr: string,
   prNumber: number
 ): Promise<string | undefined> {
+  const { sessionId } = await fetchPRCommentsAndSessionId(repoStr, prNumber);
+  return sessionId;
+}
+
+export async function fetchPRCommentsAndSessionId(
+  repoStr: string,
+  prNumber: number
+): Promise<{ comments: PRComment[]; sessionId?: string }> {
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const { data: comments } = await octokit.issues.listComments({
+  const rawComments = await octokit.paginate(octokit.issues.listComments, {
     owner,
     repo,
     issue_number: prNumber,
     per_page: 100,
   });
 
-  const pattern = /<!-- storm:session_id=([a-f0-9-]+) -->/;
-  for (const comment of comments) {
-    const match = comment.body?.match(pattern);
-    if (match) return match[1];
+  const sessionPattern = /<!-- storm:session_id=([a-f0-9-]+) -->/;
+  const stormPattern = /<!-- storm:session_id=|^## Storm/;
+  let sessionId: string | undefined;
+
+  const prComments: PRComment[] = [];
+
+  for (const comment of rawComments) {
+    const body = comment.body ?? "";
+
+    // Extract session ID
+    const sessionMatch = body.match(sessionPattern);
+    if (sessionMatch) {
+      sessionId = sessionMatch[1];
+    }
+
+    // Filter out storm's own comments
+    if (stormPattern.test(body)) continue;
+
+    prComments.push({
+      author: comment.user?.login ?? "unknown",
+      body,
+      createdAt: comment.created_at,
+    });
   }
 
-  // Also check PR body
-  const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
-  const bodyMatch = pr.body?.match(pattern);
-  if (bodyMatch) return bodyMatch[1];
+  // Also check PR body for session ID
+  if (!sessionId) {
+    const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
+    const bodyMatch = pr.body?.match(sessionPattern);
+    if (bodyMatch) sessionId = bodyMatch[1];
+  }
 
-  return undefined;
+  return { comments: prComments, sessionId };
 }

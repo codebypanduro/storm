@@ -2,6 +2,7 @@ import { log } from "../core/output.js";
 import { spawnSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
+import { chmodSync } from "fs";
 
 const INSTALL_DIR = join(homedir(), ".storm-agent");
 
@@ -30,6 +31,9 @@ export async function updateCommand() {
     log.error("bun install failed");
     process.exit(1);
   }
+
+  // Restore execute permission (git pull resets it)
+  chmodSync(join(INSTALL_DIR, "index.ts"), 0o755);
 
   log.success("storm-agent updated successfully");
 }
