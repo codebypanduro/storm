@@ -1,6 +1,6 @@
 import { loadConfig, validateConfig } from "../core/config.js";
 import { fetchLabeledIssues, fetchIssue } from "../core/github.js";
-import { processIssue, processIssueInWorktree, requestStop } from "../core/loop.js";
+import { processIssue, processIssueInWorktree } from "../core/loop.js";
 import { log } from "../core/output.js";
 import { CONFIG_DIR } from "../core/constants.js";
 import { loadContexts } from "../primitives/context.js";
@@ -31,9 +31,10 @@ export async function runCommand(
   const { dryRun = false } = options;
 
   // Handle SIGINT
+  const controller = new AbortController();
   process.on("SIGINT", () => {
     log.warn("SIGINT received, finishing current work...");
-    requestStop();
+    controller.abort();
   });
 
   let issues;
@@ -81,7 +82,7 @@ export async function runCommand(
     // Parallel via worktrees
     log.info("Running in parallel with git worktrees");
     const results = await Promise.allSettled(
-      issues.map((issue) => processIssueInWorktree(issue, config, cwd))
+      issues.map((issue) => processIssueInWorktree(issue, config, cwd, controller.signal))
     );
 
     let succeeded = 0;
@@ -100,7 +101,7 @@ export async function runCommand(
     let succeeded = 0;
     let failed = 0;
     for (const issue of issues) {
-      const result = await processIssue(issue, config, cwd);
+      const result = await processIssue(issue, config, cwd, controller.signal);
       if (result.success) {
         succeeded++;
       } else {

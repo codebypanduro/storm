@@ -9,16 +9,11 @@ import { runChecks } from "./checks.js";
 import { commentOnIssue } from "./github.js";
 import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch } from "./pr.js";
 
-let stopRequested = false;
-
-export function requestStop() {
-  stopRequested = true;
-}
-
 export async function processIssue(
   issue: GitHubIssue,
   config: StormConfig,
-  cwd: string
+  cwd: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean; prUrl?: string }> {
   const start = Date.now();
   const branch = branchName(issue);
@@ -39,7 +34,7 @@ export async function processIssue(
   const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
-    if (stopRequested) {
+    if (signal?.aborted) {
       log.warn("Stop requested, finishing up...");
       break;
     }
@@ -146,7 +141,8 @@ export async function processIssue(
 export async function processIssueInWorktree(
   issue: GitHubIssue,
   config: StormConfig,
-  baseCwd: string
+  baseCwd: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean; prUrl?: string }> {
   const worktreeDir = `${baseCwd}/.storm-worktrees/issue-${issue.number}`;
   const branch = branchName(issue);
@@ -165,7 +161,7 @@ export async function processIssueInWorktree(
 
   try {
     // Run the loop in the worktree (skip checkoutBase/createBranch since worktree handles it)
-    return await processIssueInDir(issue, config, worktreeDir);
+    return await processIssueInDir(issue, config, worktreeDir, signal);
   } finally {
     // Cleanup worktree
     await runCommand(`git worktree remove "${worktreeDir}" --force`, {
@@ -177,7 +173,8 @@ export async function processIssueInWorktree(
 async function processIssueInDir(
   issue: GitHubIssue,
   config: StormConfig,
-  cwd: string
+  cwd: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean; prUrl?: string }> {
   const start = Date.now();
   const branch = branchName(issue);
@@ -188,7 +185,7 @@ async function processIssueInDir(
   const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
-    if (stopRequested) break;
+    if (signal?.aborted) break;
 
     log.issue(issue.number, `Iteration ${iteration}/${maxIterations}`);
     const iterStart = Date.now();
@@ -296,7 +293,8 @@ When done, output %%STORM_DONE%% on its own line.
 export async function processContinue(
   pr: PRReviewContext,
   config: StormConfig,
-  cwd: string
+  cwd: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean }> {
   const start = Date.now();
   const { maxIterations, delay, stopOnError } = config.defaults;
@@ -315,7 +313,7 @@ export async function processContinue(
   const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 
   for (let iteration = 1; iteration <= maxIterations; iteration++) {
-    if (stopRequested) {
+    if (signal?.aborted) {
       log.warn("Stop requested, finishing up...");
       break;
     }

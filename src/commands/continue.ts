@@ -13,7 +13,6 @@ import { loadInstructions } from "../primitives/instructions.js";
 import { runCommandArgs } from "../primitives/runner.js";
 import { log } from "../core/output.js";
 import { CONFIG_DIR } from "../core/constants.js";
-import { requestStop } from "../core/loop.js";
 import type { PRReviewContext } from "../core/types.js";
 import { existsSync } from "fs";
 import { join } from "path";
@@ -39,9 +38,10 @@ export async function continueCommand(
   const { prNumber, dryRun = false } = options;
 
   // Handle SIGINT
+  const controller = new AbortController();
   process.on("SIGINT", () => {
     log.warn("SIGINT received, finishing current work...");
-    requestStop();
+    controller.abort();
   });
 
   // Fetch PR details
@@ -146,7 +146,7 @@ When done, output %%STORM_DONE%% on its own line.
 
   // Run the continue loop
   log.info(`Processing PR #${prNumber}...`);
-  const result = await processContinue(prContext, config, cwd);
+  const result = await processContinue(prContext, config, cwd, controller.signal);
 
   if (result.success) {
     log.success(`Successfully addressed review feedback on PR #${prNumber}`);
