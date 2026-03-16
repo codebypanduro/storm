@@ -154,6 +154,58 @@ export async function createIssue(
   return { number: data.number, url: data.html_url };
 }
 
+export async function findLinkedPR(
+  repoStr: string,
+  issueNumber: number
+): Promise<{ number: number; url: string } | null> {
+  const octokit = getOctokit();
+  const { owner, repo } = parseRepo(repoStr);
+
+  const { data: prs } = await octokit.pulls.list({
+    owner,
+    repo,
+    state: "open",
+    per_page: 100,
+  });
+
+  const pattern = new RegExp(`(?:closes|fixes|resolves)\\s+#${issueNumber}\\b`, "i");
+  for (const pr of prs) {
+    if (pr.body && pattern.test(pr.body)) {
+      return { number: pr.number, url: pr.html_url };
+    }
+  }
+
+  return null;
+}
+
+export async function findLinkedPRs(
+  repoStr: string,
+  issueNumbers: number[]
+): Promise<Map<number, { number: number; url: string }>> {
+  const octokit = getOctokit();
+  const { owner, repo } = parseRepo(repoStr);
+
+  const { data: prs } = await octokit.pulls.list({
+    owner,
+    repo,
+    state: "open",
+    per_page: 100,
+  });
+
+  const result = new Map<number, { number: number; url: string }>();
+  for (const pr of prs) {
+    if (!pr.body) continue;
+    for (const issueNumber of issueNumbers) {
+      const pattern = new RegExp(`(?:closes|fixes|resolves)\\s+#${issueNumber}\\b`, "i");
+      if (pattern.test(pr.body)) {
+        result.set(issueNumber, { number: pr.number, url: pr.html_url });
+      }
+    }
+  }
+
+  return result;
+}
+
 export async function listPullRequests(
   repoStr: string,
   head?: string
