@@ -87,8 +87,16 @@ export async function processIssue(
     }
 
     if (result.done) {
-      log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      log.step("Running final checks...");
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      log.dim(`  Iteration ${iteration} took ${formatDuration(Date.now() - iterStart)}`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) {
@@ -230,8 +238,14 @@ async function processIssueInDir(
     }
 
     if (result.done) {
-      log.issue(issue.number, `Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.issue(issue.number, `Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) break;
@@ -365,8 +379,16 @@ export async function processContinue(
     }
 
     if (result.done) {
-      log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      log.step("Running final checks...");
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      log.dim(`  Iteration ${iteration} took ${formatDuration(Date.now() - iterStart)}`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) {
