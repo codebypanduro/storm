@@ -7,7 +7,7 @@ import { resolveTemplate, resolveContinueTemplate } from "./resolver.js";
 import { spawnAgent } from "./agent.js";
 import { runChecks } from "./checks.js";
 import { commentOnIssue } from "./github.js";
-import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch } from "./pr.js";
+import { branchName, createBranch, checkoutBase, commitAndPush, openPR, checkoutExistingBranch, mergeBaseBranch } from "./pr.js";
 
 let stopRequested = false;
 
@@ -75,8 +75,16 @@ async function runIterationLoop(
     }
 
     if (result.done) {
-      log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      log.step("Running final checks...");
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      log.dim(`  Iteration ${iteration} took ${formatDuration(Date.now() - iterStart)}`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) {
@@ -164,9 +172,9 @@ export async function processIssueInWorktree(
   const branch = branchName(issue);
 
   // Create worktree
-  const { runCommand } = await import("../primitives/runner.js");
-  const setup = await runCommand(
-    `git worktree add "${worktreeDir}" -b "${branch}" "${config.github.baseBranch}"`,
+  const { runCommandArgs } = await import("../primitives/runner.js");
+  const setup = await runCommandArgs(
+    ["git", "worktree", "add", worktreeDir, "-b", branch, config.github.baseBranch],
     { cwd: baseCwd }
   );
 
@@ -180,7 +188,7 @@ export async function processIssueInWorktree(
     return await processIssueInDir(issue, config, worktreeDir);
   } finally {
     // Cleanup worktree
-    await runCommand(`git worktree remove "${worktreeDir}" --force`, {
+    await runCommandArgs(["git", "worktree", "remove", worktreeDir, "--force"], {
       cwd: baseCwd,
     });
   }
@@ -232,11 +240,17 @@ You are continuing work on a pull request. A reviewer has left feedback that nee
 ## Current Diff
 {{ pr.diff }}
 
+{{ conflicts }}
+
+## PR Comments
+{{ pr.comments }}
+
 ## Reviewer Feedback
 {{ pr.reviews }}
 
 ## Task
 Address the reviewer feedback above. Make the requested changes while maintaining code quality.
+If there are merge conflicts, resolve them by choosing the correct code and removing all conflict markers.
 When done, output %%STORM_DONE%% on its own line.
 
 {{ checks.failures }}
@@ -257,6 +271,12 @@ export async function processContinue(
   // Checkout existing branch
   if (!(await checkoutExistingBranch(branch, cwd))) {
     return { success: false };
+  }
+
+  // Merge base branch to detect conflicts
+  const mergeResult = await mergeBaseBranch(pr.baseBranch, cwd);
+  if (mergeResult.conflicts) {
+    pr.conflicts = mergeResult.conflicts;
   }
 
   let checkFailures = "";
@@ -314,8 +334,16 @@ export async function processContinue(
     }
 
     if (result.done) {
-      log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-      break;
+      log.step("Running final checks...");
+      const finalChecks = await runChecks(cwd);
+      if (finalChecks.allPassed) {
+        log.success(`Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
+        break;
+      }
+      checkFailures = finalChecks.failureSummary;
+      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
+      log.dim(`  Iteration ${iteration} took ${formatDuration(Date.now() - iterStart)}`);
+      continue;
     }
 
     if (result.exitCode !== 0 && stopOnError) {
