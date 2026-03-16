@@ -5,6 +5,7 @@ import { listCommand } from "./src/commands/list.js";
 import { runCommand } from "./src/commands/run.js";
 import { statusCommand } from "./src/commands/status.js";
 import { generateCommand } from "./src/commands/generate.js";
+import { updateCommand } from "./src/commands/update.js";
 
 const program = new Command();
 
@@ -52,6 +53,13 @@ program
       dryRun: options.dryRun,
       maxIssues: options.maxIssues,
     });
+  });
+
+program
+  .command("update")
+  .description("Update storm-agent to the latest version")
+  .action(async () => {
+    await updateCommand();
   });
 
 program.parse();

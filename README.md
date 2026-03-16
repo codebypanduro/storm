@@ -76,6 +76,49 @@ storm run --issue 42
 
 # Check storm branches and open PRs
 storm status
+
+# Analyze the codebase and generate GitHub issues
+storm generate
+
+# Preview generated issues without creating them
+storm generate --dry-run
+
+# Limit the number of issues created
+storm generate --max-issues 5
+
+# Update storm-agent to the latest version
+storm update
+```
+
+## Generating issues
+
+The `storm generate` command analyzes your codebase and automatically creates GitHub issues for improvements, bugs, and new features.
+
+```bash
+# Analyze and create issues
+storm generate
+
+# Preview what would be created without touching GitHub
+storm generate --dry-run
+
+# Cap the number of issues created
+storm generate --max-issues 5
+```
+
+It uses `.storm/generate/GENERATE.md` as the prompt template (created by `storm init`). The agent explores the codebase and emits structured JSON blocks that storm parses and posts as GitHub issues — all with the configured label so `storm run` can pick them up automatically.
+
+## Updating storm-agent
+
+If you installed via the quick install script, update to the latest version with:
+
+```bash
+storm update
+```
+
+This pulls the latest changes from GitHub and reinstalls dependencies. Alternatively, re-run the original install script — it will `git pull` an existing installation:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/codebypanduro/storm/main/install.sh | bash
 ```
 
 ## How it works
@@ -95,6 +138,19 @@ For each issue, storm:
 ## Primitives
 
 Primitives are markdown files with YAML frontmatter that live in `.storm/`. There are four kinds:
+
+### Generate workflow (`.storm/generate/GENERATE.md`)
+
+The prompt template used by `storm generate`. The agent reads this, explores the codebase, and emits issue JSON blocks.
+
+```markdown
+---
+description: Analyze codebase and generate GitHub issues
+---
+You are a code review agent...
+```
+
+Supports `{{ contexts }}` and `{{ instructions }}` placeholders, same as the main workflow.
 
 ### Workflow (`.storm/workflow/WORKFLOW.md`)
 
