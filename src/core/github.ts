@@ -51,7 +51,7 @@ export async function fetchLabeledIssues(
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const { data } = await octokit.issues.listForRepo({
+  const data = await octokit.paginate(octokit.issues.listForRepo, {
     owner,
     repo,
     labels: label,
@@ -221,7 +221,7 @@ export async function listPullRequests(
   };
   if (head) params.head = `${owner}:${head}`;
 
-  const { data } = await octokit.pulls.list(params);
+  const data = await octokit.paginate(octokit.pulls.list, params);
 
   return data.map((pr) => ({
     number: pr.number,
@@ -260,9 +260,9 @@ export async function fetchPRReviews(
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const [{ data: reviews }, { data: comments }] = await Promise.all([
-    octokit.pulls.listReviews({ owner, repo, pull_number: prNumber, per_page: 100 }),
-    octokit.pulls.listReviewComments({ owner, repo, pull_number: prNumber, per_page: 100 }),
+  const [reviews, comments] = await Promise.all([
+    octokit.paginate(octokit.pulls.listReviews, { owner, repo, pull_number: prNumber, per_page: 100 }),
+    octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber, per_page: 100 }),
   ]);
 
   // Group comments by review ID, with top-level comments (no review) grouped separately
@@ -318,7 +318,7 @@ export async function fetchPRSessionId(
   const octokit = getOctokit();
   const { owner, repo } = parseRepo(repoStr);
 
-  const { data: comments } = await octokit.issues.listComments({
+  const comments = await octokit.paginate(octokit.issues.listComments, {
     owner,
     repo,
     issue_number: prNumber,
