@@ -7,7 +7,7 @@ import {
   fetchPRReviews,
   fetchPRSessionId,
 } from "../core/github.js";
-import { processIssue, processIssueInWorktree, processContinue, requestStop } from "../core/loop.js";
+import { processIssue, processIssueInWorktree, processContinue } from "../core/loop.js";
 import { log } from "../core/output.js";
 import { CONFIG_DIR } from "../core/constants.js";
 import { loadContexts } from "../primitives/context.js";
@@ -40,9 +40,10 @@ export async function runCommand(
   const { dryRun = false } = options;
 
   // Handle SIGINT
+  const controller = new AbortController();
   process.on("SIGINT", () => {
     log.warn("SIGINT received, finishing current work...");
-    requestStop();
+    controller.abort();
   });
 
   let issues;
@@ -125,9 +126,9 @@ export async function runCommand(
       issues.map(async (issue) => {
         const linked = await findLinkedPR(config.github.repo, issue.number);
         if (linked) {
-          return runContinueForLinkedPR(linked.number, issue, config, cwd);
+          return runContinueForLinkedPR(linked.number, issue, config, cwd, controller.signal);
         }
-        return processIssueInWorktree(issue, config, cwd);
+        return processIssueInWorktree(issue, config, cwd, controller.signal);
       })
     );
 
@@ -150,9 +151,9 @@ export async function runCommand(
       const linked = await findLinkedPR(config.github.repo, issue.number);
       let result: { success: boolean };
       if (linked) {
-        result = await runContinueForLinkedPR(linked.number, issue, config, cwd);
+        result = await runContinueForLinkedPR(linked.number, issue, config, cwd, controller.signal);
       } else {
-        result = await processIssue(issue, config, cwd);
+        result = await processIssue(issue, config, cwd, controller.signal);
       }
       if (result.success) {
         succeeded++;
@@ -169,7 +170,8 @@ async function runContinueForLinkedPR(
   prNumber: number,
   issue: import("../core/types.js").GitHubIssue,
   config: import("../core/types.js").StormConfig,
-  cwd: string
+  cwd: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean }> {
   log.info(`Issue #${issue.number} has linked PR #${prNumber}, switching to continue flow`);
 
@@ -196,5 +198,5 @@ async function runContinueForLinkedPR(
     sessionId,
   };
 
-  return processContinue(prContext, config, cwd);
+  return processContinue(prContext, config, cwd, signal);
 }

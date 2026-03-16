@@ -85,6 +85,55 @@ const config: StormConfig = {
   github: { repo: "owner/repo", baseBranch: "main", label: "storm" },
 };
 
+describe("processIssue — AbortSignal stops the loop", () => {
+  beforeEach(() => {
+    mockSpawnAgent.mockReset();
+    mockRunChecks.mockReset();
+    mockCheckoutBase.mockImplementation(async () => true);
+    mockCreateBranch.mockImplementation(async () => true);
+    mockCommitAndPush.mockImplementation(async () => true);
+    mockOpenPR.mockImplementation(async () => "https://github.com/owner/repo/pull/1");
+    mockLoadContexts.mockImplementation(async () => new Map());
+    mockLoadInstructions.mockImplementation(async () => new Map());
+    mockDiscoverWorkflow.mockImplementation(async () => ({ body: "workflow", name: "workflow" }));
+    mockResolveTemplate.mockImplementation(() => "prompt");
+    mockSpawnAgent.mockImplementation(async () => ({ done: true, exitCode: 0, usage: null, sessionId: null }));
+    mockRunChecks.mockImplementation(async () => ({ allPassed: true, failureSummary: "", results: [] }));
+  });
+
+  it("skips the agent loop when signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await processIssue(issue, config, "/tmp", controller.signal);
+    expect(mockSpawnAgent).not.toHaveBeenCalled();
+    // commit/push still runs after the loop
+    expect(mockCommitAndPush).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
+  });
+
+  it("each call is independent — an aborted signal from one call does not affect the next", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    // First call with aborted signal — agent should not run
+    await processIssue(issue, config, "/tmp", controller.signal);
+    expect(mockSpawnAgent).not.toHaveBeenCalled();
+
+    mockSpawnAgent.mockReset();
+    mockSpawnAgent.mockImplementation(async () => ({ done: true, exitCode: 0, usage: null, sessionId: null }));
+    mockCommitAndPush.mockReset();
+    mockCommitAndPush.mockImplementation(async () => true);
+    mockOpenPR.mockReset();
+    mockOpenPR.mockImplementation(async () => "https://github.com/owner/repo/pull/1");
+
+    // Second call with no signal — agent SHOULD run
+    const result = await processIssue(issue, config, "/tmp");
+    expect(result.success).toBe(true);
+    expect(mockSpawnAgent).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("processIssue — final checks gate", () => {
   beforeEach(() => {
     mockSpawnAgent.mockReset();
