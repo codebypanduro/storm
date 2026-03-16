@@ -106,6 +106,27 @@ storm continue 42 --dry-run
 
 # Update storm-agent to the latest version
 storm update
+
+# Register a project for global operations
+storm global add .
+
+# List all registered projects with issue counts
+storm global list
+
+# Run storm across all registered projects
+storm global run
+
+# Preview issues across all projects without executing
+storm global run --dry-run
+
+# Run all projects concurrently
+storm global run --parallel
+
+# Show branches and PRs across all projects
+storm global status
+
+# Unregister a project
+storm global remove .
 ```
 
 ## Generating issues
@@ -155,6 +176,36 @@ The continue template supports all standard placeholders plus PR-specific ones:
 | `{{ pr.body }}` | PR body |
 | `{{ pr.diff }}` | Diff stat summary |
 | `{{ pr.reviews }}` | Formatted review comments with file paths and diff hunks |
+
+## Global mode
+
+The `storm global` command lets you manage and run storm across multiple projects from a single place. Project paths are stored in `~/.storm/global.json`.
+
+```bash
+# Register projects
+storm global add /path/to/project-a
+storm global add .
+
+# See all registered projects and their issue counts
+storm global list
+
+# Run storm across all projects sequentially
+storm global run
+
+# Run in parallel
+storm global run --parallel
+
+# Preview without executing
+storm global run --dry-run
+
+# Check status across all projects
+storm global status
+
+# Unregister a project
+storm global remove /path/to/project-a
+```
+
+Projects must have a valid `.storm/storm.json` to be registered. Invalid or missing projects are skipped with a warning during `global run` and `global status`.
 
 ## Updating storm-agent
 

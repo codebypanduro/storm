@@ -123,3 +123,11 @@ export interface PRReviewComment {
   line: number | null;
   diffHunk: string;
 }
+
+export interface GlobalProject {
+  path: string;
+}
+
+export interface GlobalConfig {
+  projects: GlobalProject[];
+}

@@ -7,6 +7,13 @@ import { statusCommand } from "./src/commands/status.js";
 import { generateCommand } from "./src/commands/generate.js";
 import { updateCommand } from "./src/commands/update.js";
 import { continueCommand } from "./src/commands/continue.js";
+import {
+  globalAddCommand,
+  globalRemoveCommand,
+  globalListCommand,
+  globalRunCommand,
+  globalStatusCommand,
+} from "./src/commands/global.js";
 
 const program = new Command();
 
@@ -73,6 +80,47 @@ program
   .description("Update storm-agent to the latest version")
   .action(async () => {
     await updateCommand();
+  });
+
+const globalCmd = program
+  .command("global")
+  .description("Manage and run storm across multiple projects");
+
+globalCmd
+  .command("add <path>")
+  .description("Register a project path for global operations")
+  .action(async (path: string) => {
+    await globalAddCommand(path);
+  });
+
+globalCmd
+  .command("remove <path>")
+  .description("Unregister a project path")
+  .action(async (path: string) => {
+    await globalRemoveCommand(path);
+  });
+
+globalCmd
+  .command("list")
+  .description("Show registered projects with issue counts")
+  .action(async () => {
+    await globalListCommand();
+  });
+
+globalCmd
+  .command("run")
+  .description("Run storm across all registered projects")
+  .option("--dry-run", "Preview issues without executing")
+  .option("--parallel", "Run projects concurrently instead of sequentially")
+  .action(async (options) => {
+    await globalRunCommand({ dryRun: options.dryRun, parallel: options.parallel });
+  });
+
+globalCmd
+  .command("status")
+  .description("Show storm branches and PRs across all projects")
+  .action(async () => {
+    await globalStatusCommand();
   });
 
 program.parse();
