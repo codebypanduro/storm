@@ -39,3 +39,12 @@ export async function loadConfig(cwd: string): Promise<StormConfig> {
 export function getDefaultConfig(): StormConfig {
   return structuredClone(DEFAULT_CONFIG);
 }
+
+export function validateConfig(config: StormConfig): string[] {
+  const errors: string[] = [];
+  if (!config.github.repo) errors.push('github.repo is required (e.g. "owner/repo")');
+  else if (!config.github.repo.includes("/")) errors.push('github.repo must be in "owner/repo" format');
+  if (config.defaults.maxIterations < 1) errors.push("defaults.maxIterations must be >= 1");
+  if (!config.agent.command) errors.push("agent.command is required");
+  return errors;
+}

@@ -1,4 +1,4 @@
-import { loadConfig } from "../core/config.js";
+import { loadConfig, validateConfig } from "../core/config.js";
 import { listPullRequests } from "../core/github.js";
 import { runCommand } from "../primitives/runner.js";
 import { log } from "../core/output.js";
@@ -6,6 +6,12 @@ import pc from "picocolors";
 
 export async function statusCommand(cwd: string) {
   const config = await loadConfig(cwd);
+
+  const errors = validateConfig(config);
+  if (errors.length > 0) {
+    for (const err of errors) log.error(err);
+    process.exit(1);
+  }
 
   // List storm/* branches
   log.step("Local storm branches:");
