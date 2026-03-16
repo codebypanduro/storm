@@ -54,6 +54,7 @@ export interface AgentResult {
   done: boolean;
   timedOut: boolean;
   usage?: AgentUsage;
+  sessionId?: string;
   durationMs: number;
 }
 
@@ -81,4 +82,31 @@ export interface GeneratedIssue {
   title: string;
   body: string;
   labels: string[];
+}
+
+export interface PRReviewContext {
+  prNumber: number;
+  prTitle: string;
+  prBody: string;
+  prBranch: string;
+  baseBranch: string;
+  diffSummary: string;
+  reviews: PRReview[];
+  linkedIssue: GitHubIssue;
+  sessionId?: string;
+}
+
+export interface PRReview {
+  author: string;
+  state: string;
+  body: string;
+  comments: PRReviewComment[];
+}
+
+export interface PRReviewComment {
+  author: string;
+  body: string;
+  path: string;
+  line: number | null;
+  diffHunk: string;
 }

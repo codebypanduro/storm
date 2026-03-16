@@ -6,6 +6,7 @@ import { runCommand } from "./src/commands/run.js";
 import { statusCommand } from "./src/commands/status.js";
 import { generateCommand } from "./src/commands/generate.js";
 import { updateCommand } from "./src/commands/update.js";
+import { continueCommand } from "./src/commands/continue.js";
 
 const program = new Command();
 
@@ -53,6 +54,17 @@ program
     await generateCommand(process.cwd(), {
       dryRun: options.dryRun,
       maxIssues: options.maxIssues,
+    });
+  });
+
+program
+  .command("continue <pr-number>")
+  .description("Address review feedback on an existing storm PR")
+  .option("--dry-run", "Preview the resolved prompt without executing")
+  .action(async (prNumber: string, options: { dryRun?: boolean }) => {
+    await continueCommand(process.cwd(), {
+      prNumber: parseInt(prNumber, 10),
+      dryRun: options.dryRun,
     });
   });
 

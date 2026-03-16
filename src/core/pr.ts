@@ -59,7 +59,8 @@ export async function checkoutBase(
 export async function commitAndPush(
   branch: string,
   issue: GitHubIssue,
-  cwd: string
+  cwd: string,
+  commitMessage?: string
 ): Promise<boolean> {
   // Check for uncommitted changes
   const status = await runCommand("git status --porcelain", { cwd });
@@ -74,7 +75,7 @@ export async function commitAndPush(
     return false;
   }
 
-  const msg = `storm: implement #${issue.number} - ${issue.title}`;
+  const msg = commitMessage ?? `storm: implement #${issue.number} - ${issue.title}`;
   const commitResult = await runCommandArgs(["git", "commit", "-m", msg], { cwd });
   if (commitResult.exitCode !== 0) {
     log.error(`git commit failed: ${commitResult.stderr}`);
@@ -85,6 +86,30 @@ export async function commitAndPush(
   if (pushResult.exitCode !== 0) {
     log.error(`git push failed: ${pushResult.stderr}`);
     return false;
+  }
+
+  return true;
+}
+
+export async function checkoutExistingBranch(
+  branch: string,
+  cwd: string
+): Promise<boolean> {
+  const fetch = await runCommandArgs(["git", "fetch", "origin", branch], { cwd });
+  if (fetch.exitCode !== 0) {
+    log.error(`Failed to fetch branch "${branch}": ${fetch.stderr}`);
+    return false;
+  }
+
+  const checkout = await runCommandArgs(["git", "checkout", branch], { cwd });
+  if (checkout.exitCode !== 0) {
+    log.error(`Failed to checkout branch "${branch}": ${checkout.stderr}`);
+    return false;
+  }
+
+  const pull = await runCommand("git pull", { cwd });
+  if (pull.exitCode !== 0) {
+    log.warn(`git pull failed: ${pull.stderr}`);
   }
 
   return true;
@@ -137,12 +162,13 @@ async function buildPRDescription(
 function formatPRComment(
   model: string,
   usage: AgentUsage,
-  durationMs: number
+  durationMs: number,
+  sessionId?: string
 ): string {
   const totalTokens = usage.inputTokens + usage.outputTokens;
   const fmt = (n: number) => n.toLocaleString("en-US");
 
-  return [
+  const lines = [
     "## Storm Agent Summary",
     "",
     `| | |`,
@@ -158,7 +184,13 @@ function formatPRComment(
     ...(usage.cacheCreationTokens > 0
       ? [`| **Cache creation tokens** | ${fmt(usage.cacheCreationTokens)} |`]
       : []),
-  ].join("\n");
+  ];
+
+  if (sessionId) {
+    lines.push("", `<!-- storm:session_id=${sessionId} -->`);
+  }
+
+  return lines.join("\n");
 }
 
 export async function openPR(
@@ -166,7 +198,7 @@ export async function openPR(
   issue: GitHubIssue,
   branch: string,
   cwd: string,
-  stats?: { model: string; usage: AgentUsage; durationMs: number }
+  stats?: { model: string; usage: AgentUsage; durationMs: number; sessionId?: string }
 ): Promise<string | null> {
   try {
     const body = await buildPRDescription(issue, branch, config.github.baseBranch, cwd);
@@ -187,7 +219,7 @@ export async function openPR(
       await commentOnIssue(
         config.github.repo,
         pr.number,
-        formatPRComment(stats.model, stats.usage, stats.durationMs)
+        formatPRComment(stats.model, stats.usage, stats.durationMs, stats.sessionId)
       );
     }
 

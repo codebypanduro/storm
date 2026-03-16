@@ -9,6 +9,7 @@ import {
   CONTEXT_FILE,
   WORKFLOW_FILE,
   GENERATE_FILE,
+  CONTINUE_FILE,
 } from "../core/constants.js";
 
 const MARKER_FILES: Record<string, PrimitiveEntry["kind"]> = {
@@ -66,6 +67,19 @@ export async function discoverWorkflow(
     const content = await Bun.file(filePath).text();
     const { frontmatter, body } = parsePrimitive(content);
     return { name: "workflow", kind: "workflow", frontmatter, body, filePath };
+  } catch {
+    return null;
+  }
+}
+
+export async function discoverContinueWorkflow(
+  cwd: string
+): Promise<PrimitiveEntry | null> {
+  const filePath = join(cwd, CONFIG_DIR, "continue", CONTINUE_FILE);
+  try {
+    const content = await Bun.file(filePath).text();
+    const { frontmatter, body } = parsePrimitive(content);
+    return { name: "continue", kind: "workflow", frontmatter, body, filePath };
   } catch {
     return null;
   }

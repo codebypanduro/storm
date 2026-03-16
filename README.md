@@ -86,6 +86,12 @@ storm generate --dry-run
 # Limit the number of issues created
 storm generate --max-issues 5
 
+# Address review feedback on an existing storm PR
+storm continue 42
+
+# Preview the continue prompt without executing
+storm continue 42 --dry-run
+
 # Update storm-agent to the latest version
 storm update
 ```
@@ -106,6 +112,37 @@ storm generate --max-issues 5
 ```
 
 It uses `.storm/generate/GENERATE.md` as the prompt template (created by `storm init`). The agent explores the codebase and emits structured JSON blocks that storm parses and posts as GitHub issues — all with the configured label so `storm run` can pick them up automatically.
+
+## Continuing PRs
+
+The `storm continue` command picks up an existing PR, fetches reviewer feedback, and pushes follow-up commits to address it.
+
+```bash
+# Address review feedback on PR #42
+storm continue 42
+
+# Preview the resolved prompt without running the agent
+storm continue 42 --dry-run
+```
+
+**How it works:**
+
+1. Fetches the PR details and extracts the linked issue (`Closes #N`)
+2. Fetches all review comments with file paths and diff hunks
+3. Looks for a stored session ID from the original `storm run` (embedded in PR comments)
+4. If a session ID is found, resumes the original Claude Code session — preserving full conversation context from the initial implementation
+5. Runs the continue workflow (`.storm/continue/CONTINUE.md`) with reviewer feedback injected
+6. Commits and pushes changes, then posts a summary comment on the PR
+
+The continue template supports all standard placeholders plus PR-specific ones:
+
+| Placeholder | Description |
+|---|---|
+| `{{ pr.number }}` | PR number |
+| `{{ pr.title }}` | PR title |
+| `{{ pr.body }}` | PR body |
+| `{{ pr.diff }}` | Diff stat summary |
+| `{{ pr.reviews }}` | Formatted review comments with file paths and diff hunks |
 
 ## Updating storm-agent
 
