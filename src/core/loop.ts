@@ -15,24 +15,12 @@ export function requestStop() {
   stopRequested = true;
 }
 
-export async function processIssue(
+async function runIterationLoop(
   issue: GitHubIssue,
   config: StormConfig,
   cwd: string
-): Promise<{ success: boolean; prUrl?: string }> {
-  const start = Date.now();
-  const branch = branchName(issue);
+): Promise<{ success: boolean; totalUsage: AgentUsage; lastSessionId?: string }> {
   const { maxIterations, delay, stopOnError } = config.defaults;
-
-  log.issue(issue.number, `Starting: ${issue.title}`);
-
-  // Checkout base and create branch
-  if (!(await checkoutBase(config.github.baseBranch, cwd))) {
-    return { success: false };
-  }
-  if (!(await createBranch(branch, cwd))) {
-    return { success: false };
-  }
 
   let checkFailures = "";
   let lastSessionId: string | undefined;
@@ -56,7 +44,7 @@ export async function processIssue(
 
     if (!workflow) {
       log.error("No WORKFLOW.md found in .storm/workflow/");
-      return { success: false };
+      return { success: false, totalUsage, lastSessionId };
     }
 
     // Resolve template
@@ -124,6 +112,30 @@ export async function processIssue(
     }
   }
 
+  return { success: true, totalUsage, lastSessionId };
+}
+
+export async function processIssue(
+  issue: GitHubIssue,
+  config: StormConfig,
+  cwd: string
+): Promise<{ success: boolean; prUrl?: string }> {
+  const start = Date.now();
+  const branch = branchName(issue);
+
+  log.issue(issue.number, `Starting: ${issue.title}`);
+
+  // Checkout base and create branch
+  if (!(await checkoutBase(config.github.baseBranch, cwd))) {
+    return { success: false };
+  }
+  if (!(await createBranch(branch, cwd))) {
+    return { success: false };
+  }
+
+  const { success, totalUsage, lastSessionId } = await runIterationLoop(issue, config, cwd);
+  if (!success) return { success: false };
+
   // Commit and push
   log.step("Committing and pushing...");
   const pushed = await commitAndPush(branch, issue, cwd);
@@ -189,78 +201,9 @@ async function processIssueInDir(
 ): Promise<{ success: boolean; prUrl?: string }> {
   const start = Date.now();
   const branch = branchName(issue);
-  const { maxIterations, delay, stopOnError } = config.defaults;
 
-  let checkFailures = "";
-  let lastSessionId: string | undefined;
-  const totalUsage: AgentUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-
-  for (let iteration = 1; iteration <= maxIterations; iteration++) {
-    if (stopRequested) break;
-
-    log.issue(issue.number, `Iteration ${iteration}/${maxIterations}`);
-    const iterStart = Date.now();
-
-    const [contexts, instructions, workflow] = await Promise.all([
-      loadContexts(cwd),
-      loadInstructions(cwd),
-      discoverWorkflow(cwd),
-    ]);
-
-    if (!workflow) {
-      log.error("No WORKFLOW.md found");
-      return { success: false };
-    }
-
-    const prompt = resolveTemplate(workflow.body, {
-      issue,
-      contexts,
-      instructions,
-      checkFailures: checkFailures || undefined,
-    });
-
-    const result = await spawnAgent(prompt, config, { cwd });
-
-    if (result.sessionId) {
-      lastSessionId = result.sessionId;
-    }
-
-    if (result.usage) {
-      totalUsage.inputTokens += result.usage.inputTokens;
-      totalUsage.outputTokens += result.usage.outputTokens;
-      totalUsage.cacheReadTokens += result.usage.cacheReadTokens;
-      totalUsage.cacheCreationTokens += result.usage.cacheCreationTokens;
-    }
-
-    if (result.timedOut) {
-      log.error("Agent timed out");
-      if (stopOnError) break;
-    }
-
-    if (result.done) {
-      const finalChecks = await runChecks(cwd);
-      if (finalChecks.allPassed) {
-        log.issue(issue.number, `Agent signaled completion (${formatDuration(Date.now() - iterStart)})`);
-        break;
-      }
-      checkFailures = finalChecks.failureSummary;
-      log.warn(`Agent signaled done but ${finalChecks.results.filter((r) => !r.passed).length} check(s) failed — continuing...`);
-      continue;
-    }
-
-    if (result.exitCode !== 0 && stopOnError) break;
-
-    const checkResults = await runChecks(cwd);
-    if (checkResults.allPassed) {
-      checkFailures = "";
-    } else {
-      checkFailures = checkResults.failureSummary;
-    }
-
-    if (iteration < maxIterations && delay > 0) {
-      await Bun.sleep(delay * 1000);
-    }
-  }
+  const { success, totalUsage, lastSessionId } = await runIterationLoop(issue, config, cwd);
+  if (!success) return { success: false };
 
   // Commit and push
   const pushed = await commitAndPush(branch, issue, cwd);
