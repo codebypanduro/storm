@@ -1,0 +1,22 @@
+{
+  "name": "storm-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "storm": "./index.ts"
+  },
+  "scripts": {
+    "start": "bun run index.ts",
+    "typecheck": "bun tsc --noEmit"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "commander": "^13.1.0",
+    "gray-matter": "^4.0.3",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.5",
+    "typescript": "^5.8.2"
+  }
+}
