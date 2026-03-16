@@ -1,5 +1,42 @@
 import type { GitHubIssue } from "./types.js";
 
+export function resolveGenerateTemplate(
+  template: string,
+  options: {
+    contexts: Map<string, string>;
+    instructions: Map<string, string>;
+  }
+): string {
+  let result = template;
+  const { contexts, instructions } = options;
+
+  // Named context placeholders: {{ contexts.name }}
+  for (const [name, value] of contexts) {
+    const pattern = new RegExp(`\\{\\{\\s*contexts\\.${escapeRegex(name)}\\s*\\}\\}`, "g");
+    result = result.replace(pattern, value);
+  }
+
+  // Named instruction placeholders: {{ instructions.name }}
+  for (const [name, value] of instructions) {
+    const pattern = new RegExp(`\\{\\{\\s*instructions\\.${escapeRegex(name)}\\s*\\}\\}`, "g");
+    result = result.replace(pattern, value);
+  }
+
+  // Bulk contexts placeholder: {{ contexts }}
+  const allContexts = Array.from(contexts.entries())
+    .map(([name, value]) => `### ${name}\n${value}`)
+    .join("\n\n");
+  result = result.replace(/\{\{\s*contexts\s*\}\}/g, allContexts || "_No contexts configured._");
+
+  // Bulk instructions placeholder: {{ instructions }}
+  const allInstructions = Array.from(instructions.entries())
+    .map(([name, value]) => `### ${name}\n${value}`)
+    .join("\n\n");
+  result = result.replace(/\{\{\s*instructions\s*\}\}/g, allInstructions || "_No instructions configured._");
+
+  return result;
+}
+
 export function resolveTemplate(
   template: string,
   options: {

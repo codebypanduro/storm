@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import type { GitHubIssue } from "./types.js";
+import type { GitHubIssue, GeneratedIssue } from "./types.js";
 import { log } from "./output.js";
 
 function getOctokit(): Octokit {
@@ -112,6 +112,24 @@ export async function commentOnIssue(
     issue_number: issueNumber,
     body,
   });
+}
+
+export async function createIssue(
+  repoStr: string,
+  issue: GeneratedIssue
+): Promise<{ number: number; url: string }> {
+  const octokit = getOctokit();
+  const { owner, repo } = parseRepo(repoStr);
+
+  const { data } = await octokit.issues.create({
+    owner,
+    repo,
+    title: issue.title,
+    body: issue.body,
+    labels: issue.labels,
+  });
+
+  return { number: data.number, url: data.html_url };
 }
 
 export async function listPullRequests(
