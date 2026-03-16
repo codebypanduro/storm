@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REPO="https://github.com/codebypanduro/storm-agent.git"
+REPO="https://github.com/codebypanduro/storm.git"
 INSTALL_DIR="$HOME/.storm-agent"
 
 echo "Installing storm-agent..."

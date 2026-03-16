@@ -13,14 +13,14 @@ Autonomous GitHub issue resolver powered by Claude Code. Fetches issues labeled 
 ### Quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codebypanduro/storm-agent/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/codebypanduro/storm/main/install.sh | bash
 ```
 
 ### Manual install
 
 ```bash
-git clone https://github.com/codebypanduro/storm-agent.git
-cd storm-agent
+git clone https://github.com/codebypanduro/storm.git
+cd storm
 bun install
 ```
 
