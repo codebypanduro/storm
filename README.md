@@ -98,6 +98,21 @@ storm generate --dry-run
 # Limit the number of issues created
 storm generate --max-issues 5
 
+# Multi-agent war room for complex tasks
+storm war-room --issue 42
+
+# War room with a free-form prompt
+storm war-room --prompt "Refactor the auth module"
+
+# War room with terminal UI enabled
+storm war-room --issue 42 --ui
+
+# Filter which agents participate
+storm war-room --issue 42 --agents storm,johnny
+
+# Preview war room setup without spawning agents
+storm war-room --issue 42 --dry-run
+
 # Address review feedback on an existing storm PR
 storm continue 42
 
@@ -176,6 +191,65 @@ The continue template supports all standard placeholders plus PR-specific ones:
 | `{{ pr.body }}` | PR body |
 | `{{ pr.diff }}` | Diff stat summary |
 | `{{ pr.reviews }}` | Formatted review comments with file paths and diff hunks |
+
+## War room
+
+The `storm war-room` command launches a multi-agent session where several specialized agents collaborate on a complex task in a round-robin loop.
+
+```bash
+# Work on a GitHub issue with all default agents
+storm war-room --issue 42
+
+# Use a free-form prompt instead
+storm war-room --prompt "Add dark mode support"
+
+# Enable the real-time terminal UI
+storm war-room --issue 42 --ui
+
+# Only use specific agents
+storm war-room --issue 42 --agents storm,johnny
+```
+
+**How it works:**
+
+1. Loads agents — 3 defaults (Storm/Architect, Johnny/Engineer, Alan/QA) or custom agents from `.storm/agents/`
+2. Creates a branch and enters a round-robin loop (up to 30 turns):
+   - Each agent receives the task, its personality prompt, remaining kibble budget, and a log of all previous events
+   - Agents can transfer kibble to other agents via `%%TRANSFER_KIBBLE:{amount}:{name}%%`
+   - Tool uses that read or modify files cost 1 kibble; agents with 0 kibble are skipped
+   - When an agent outputs `%%STORM_DONE%%`, the session ends
+3. Commits, pushes, and opens a PR
+
+**Terminal UI (`--ui`):**
+
+When enabled (or auto-detected on a TTY), a split-panel ANSI interface renders in the alternate screen buffer:
+
+- **Left panel** — agent list with kibble bars and tool counts
+- **Right panel** — scrolling event log
+- **Status bar** — current turn, active agent, last tool used, elapsed time
+
+Falls back to plain log output on small terminals (< 60 cols or < 10 rows) or when piped.
+
+**Custom agents:**
+
+Create `.storm/agents/{id}/AGENT.md` with frontmatter:
+
+```markdown
+---
+name: Designer
+role: UI/UX
+kibble: 15
+model: opus
+---
+You are a UI/UX specialist. Focus on component structure, accessibility, and visual consistency.
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `name` | directory name | Display name |
+| `role` | `"Agent"` | Role label |
+| `kibble` | `20` | Tool budget |
+| `model` | config default | Override Claude model |
 
 ## Global mode
 
