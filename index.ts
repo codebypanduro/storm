@@ -14,6 +14,7 @@ import {
   globalRunCommand,
   globalStatusCommand,
 } from "./src/commands/global.js";
+import { warRoomCommand } from "./src/commands/war-room.js";
 
 const program = new Command();
 
@@ -80,6 +81,24 @@ program
   .description("Update storm-agent to the latest version")
   .action(async () => {
     await updateCommand();
+  });
+
+program
+  .command("war-room")
+  .description("Spin up multiple named agents in a shared workspace to collaborate on a task")
+  .option("-i, --issue <number>", "GitHub issue number to solve", parseInt)
+  .option("-p, --prompt <text>", "Free-form task description")
+  .option("--agents <list>", "Comma-separated list of agent IDs to use", (v: string) =>
+    v.split(",").map((s) => s.trim())
+  )
+  .option("--dry-run", "Preview agents and task without spawning processes")
+  .action(async (options) => {
+    await warRoomCommand(process.cwd(), {
+      issue: options.issue,
+      prompt: options.prompt,
+      agents: options.agents,
+      dryRun: options.dryRun,
+    });
   });
 
 const globalCmd = program

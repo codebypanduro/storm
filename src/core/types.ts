@@ -131,3 +131,58 @@ export interface GlobalProject {
 export interface GlobalConfig {
   projects: GlobalProject[];
 }
+
+// War-room types
+
+export interface AgentConfig {
+  name: string;
+  role: string;
+  kibble: number;
+  model: string;
+  personality: string;
+}
+
+export interface WarRoomAgent extends AgentConfig {
+  id: string;
+  kibbleRemaining: number;
+  sessionId?: string;
+  toolUseCount: number;
+}
+
+export type WarRoomEventType =
+  | "talk"
+  | "bash"
+  | "read-file"
+  | "transfer-kibble"
+  | "system"
+  | "done";
+
+export interface KibbleTransfer {
+  to: string;
+  amount: number;
+}
+
+export interface WarRoomEvent {
+  ts: number;
+  agent: string;
+  type: WarRoomEventType;
+  room: string;
+  data: string | KibbleTransfer;
+}
+
+export interface WarRoomSession {
+  id: string;
+  task: string;
+  agents: WarRoomAgent[];
+  startedAt: number;
+  done: boolean;
+  prUrl?: string;
+  issueNumber?: number;
+}
+
+export interface WarRoomOptions {
+  issue?: number;
+  prompt?: string;
+  agents?: string[];
+  dryRun?: boolean;
+}
