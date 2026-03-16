@@ -1,5 +1,5 @@
 import { loadConfig, validateConfig } from "../core/config.js";
-import { fetchLabeledIssues } from "../core/github.js";
+import { fetchLabeledIssues, findLinkedPRs } from "../core/github.js";
 import { log } from "../core/output.js";
 import pc from "picocolors";
 
@@ -21,10 +21,17 @@ export async function listCommand(cwd: string) {
     return;
   }
 
+  const linkedPRs = await findLinkedPRs(
+    config.github.repo,
+    issues.map((i) => i.number)
+  );
+
   console.log("");
   for (const issue of issues) {
     const num = pc.bold(pc.cyan(`#${issue.number}`));
-    console.log(`  ${num}  ${issue.title}`);
+    const linked = linkedPRs.get(issue.number);
+    const prTag = linked ? pc.dim(` → PR #${linked.number}`) : "";
+    console.log(`  ${num}  ${issue.title}${prTag}`);
   }
   console.log("");
   log.info(`${issues.length} issue(s) found`);
