@@ -67,3 +67,16 @@ export interface CommandResult {
   exitCode: number;
   timedOut: boolean;
 }
+
+export interface Schedule {
+  id: string;
+  cron: string;
+  issueNumber?: number;
+  description?: string;
+  createdAt: string;
+  lastRun?: string;
+}
+
+export interface ScheduleFile {
+  schedules: Schedule[];
+}

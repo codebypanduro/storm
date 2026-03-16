@@ -4,6 +4,12 @@ import { initCommand } from "./src/commands/init.js";
 import { listCommand } from "./src/commands/list.js";
 import { runCommand } from "./src/commands/run.js";
 import { statusCommand } from "./src/commands/status.js";
+import {
+  scheduleAddCommand,
+  scheduleListCommand,
+  scheduleRemoveCommand,
+  scheduleDaemonCommand,
+} from "./src/commands/schedule.js";
 
 const program = new Command();
 
@@ -39,6 +45,43 @@ program
   .description("Show storm branches and open PRs")
   .action(async () => {
     await statusCommand(process.cwd());
+  });
+
+const schedule = program
+  .command("schedule")
+  .description("Manage scheduled storm runs");
+
+schedule
+  .command("add <cron>")
+  .description('Add a cron schedule (e.g. "0 8 * * *" for daily at 8:00)')
+  .option("-i, --issue <number>", "Only process a single issue by number", parseInt)
+  .option("-d, --description <text>", "Optional description for this schedule")
+  .action(async (cron: string, options) => {
+    await scheduleAddCommand(process.cwd(), cron, {
+      issue: options.issue,
+      description: options.description,
+    });
+  });
+
+schedule
+  .command("list")
+  .description("List all configured schedules")
+  .action(async () => {
+    await scheduleListCommand(process.cwd());
+  });
+
+schedule
+  .command("remove <id>")
+  .description("Remove a schedule by its id")
+  .action(async (id: string) => {
+    await scheduleRemoveCommand(process.cwd(), id);
+  });
+
+schedule
+  .command("start")
+  .description("Start the scheduler daemon (runs in foreground)")
+  .action(async () => {
+    await scheduleDaemonCommand(process.cwd());
   });
 
 program.parse();
