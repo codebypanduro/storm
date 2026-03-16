@@ -9,3 +9,4 @@ export const CHECK_FILE = "CHECK.md";
 export const INSTRUCTION_FILE = "INSTRUCTION.md";
 export const CONTEXT_FILE = "CONTEXT.md";
 export const PR_DESCRIPTION_FILE = "PR_DESCRIPTION.md";
+export const CONTINUE_FILE = "CONTINUE.md";

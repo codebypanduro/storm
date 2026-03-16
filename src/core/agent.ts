@@ -5,9 +5,9 @@ import { log } from "./output.js";
 export async function spawnAgent(
   prompt: string,
   config: StormConfig,
-  options: { timeout?: number; cwd?: string } = {}
+  options: { timeout?: number; cwd?: string; resumeSessionId?: string } = {}
 ): Promise<AgentResult> {
-  const { timeout = 300_000, cwd } = options;
+  const { timeout = 300_000, cwd, resumeSessionId } = options;
 
   const args = [
     ...config.agent.args,
@@ -17,6 +17,10 @@ export async function spawnAgent(
     "--model",
     config.agent.model,
   ];
+
+  if (resumeSessionId) {
+    args.push("--resume", resumeSessionId);
+  }
 
   log.dim(`  $ ${config.agent.command} ${args.join(" ")}`);
 
@@ -41,6 +45,7 @@ export async function spawnAgent(
   // Read stdout line by line, parse stream-json
   let output = "";
   let usage: AgentUsage | undefined;
+  let sessionId: string | undefined;
   let exitCode = 0;
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
@@ -62,6 +67,7 @@ export async function spawnAgent(
             const msg = JSON.parse(line);
             if (msg.type === "result") {
               output = msg.result || "";
+              sessionId = msg.session_id ?? undefined;
               if (msg.usage) {
                 usage = {
                   inputTokens: msg.usage.input_tokens ?? 0,
@@ -100,5 +106,5 @@ export async function spawnAgent(
   const done = output.includes(STOP_MARKER);
   const durationMs = Date.now() - start;
 
-  return { output, exitCode, done, timedOut, usage, durationMs };
+  return { output, exitCode, done, timedOut, usage, sessionId, durationMs };
 }
