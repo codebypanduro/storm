@@ -4,6 +4,7 @@ import { initCommand } from "./src/commands/init.js";
 import { listCommand } from "./src/commands/list.js";
 import { runCommand } from "./src/commands/run.js";
 import { statusCommand } from "./src/commands/status.js";
+import { generateCommand } from "./src/commands/generate.js";
 
 const program = new Command();
 
@@ -39,6 +40,18 @@ program
   .description("Show storm branches and open PRs")
   .action(async () => {
     await statusCommand(process.cwd());
+  });
+
+program
+  .command("generate")
+  .description("Analyze the codebase and generate GitHub issues for improvements and new features")
+  .option("--dry-run", "Preview issues without creating them on GitHub")
+  .option("--max-issues <number>", "Maximum number of issues to create", parseInt)
+  .action(async (options) => {
+    await generateCommand(process.cwd(), {
+      dryRun: options.dryRun,
+      maxIssues: options.maxIssues,
+    });
   });
 
 program.parse();

@@ -1,7 +1,10 @@
 export const STOP_MARKER = "%%STORM_DONE%%";
+export const ISSUE_START_MARKER = "%%STORM_ISSUE_START%%";
+export const ISSUE_END_MARKER = "%%STORM_ISSUE_END%%";
 export const CONFIG_DIR = ".storm";
 export const CONFIG_FILE = "storm.json";
 export const WORKFLOW_FILE = "WORKFLOW.md";
+export const GENERATE_FILE = "GENERATE.md";
 export const CHECK_FILE = "CHECK.md";
 export const INSTRUCTION_FILE = "INSTRUCTION.md";
 export const CONTEXT_FILE = "CONTEXT.md";

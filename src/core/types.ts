@@ -67,3 +67,9 @@ export interface CommandResult {
   exitCode: number;
   timedOut: boolean;
 }
+
+export interface GeneratedIssue {
+  title: string;
+  body: string;
+  labels: string[];
+}
