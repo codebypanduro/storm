@@ -207,6 +207,100 @@ storm global remove /path/to/project-a
 
 Projects must have a valid `.storm/storm.json` to be registered. Invalid or missing projects are skipped with a warning during `global run` and `global status`.
 
+## War-room mode
+
+The `storm war-room` command spins up multiple named agents in a shared workspace. Instead of one agent working alone, a team with defined roles collaborates via a shared event log until the task is done.
+
+```bash
+# Start a war room for a GitHub issue (uses default agents)
+storm war-room --issue 42
+
+# Use a specific set of agents
+storm war-room --issue 42 --agents architect,engineer,qa
+
+# Start a war room from a free-form prompt
+storm war-room --prompt "Build a dark mode toggle"
+
+# Preview agents and task without spawning processes
+storm war-room --issue 42 --dry-run
+```
+
+### How it works
+
+1. Storm loads the task (from an issue or `--prompt`) and creates a session under `.storm/sessions/{id}/`
+2. Each agent runs as a separate `claude -p` process with its own role and personality
+3. Agents communicate only via a shared append-only event log (`.storm/sessions/{id}/events.jsonl`)
+4. Each agent has a **kibble budget** — expensive tool uses (bash, file edits) cost 1 kibble
+5. The orchestrator runs up to 30 turns, picking agents round-robin, skipping any with 0 kibble
+6. When an agent outputs `%%STORM_DONE%%`, the session ends and a PR is opened
+
+### Default agents
+
+| ID | Name | Role | Responsibility |
+|---|---|---|---|
+| `architect` | Storm | Architect | Reads the issue, creates a plan, delegates tasks |
+| `engineer` | Johnny | Engineer | Implements code based on the plan, runs typecheck |
+| `qa` | Alan | QA | Runs tests, reviews code, signs off on quality |
+
+### Kibble transfers
+
+An agent can transfer part of its kibble budget to another agent by including this in its response:
+
+```
+%%TRANSFER_KIBBLE:5:Johnny%%
+```
+
+This deducts 5 kibble from the current agent and gives it to Johnny.
+
+### Custom agents
+
+Define custom agents in `.storm/agents/{id}/AGENT.md`:
+
+```
+.storm/
+└── agents/
+    ├── architect/
+    │   └── AGENT.md
+    ├── engineer/
+    │   └── AGENT.md
+    └── qa/
+        └── AGENT.md
+```
+
+Each `AGENT.md` uses YAML frontmatter followed by the agent's personality prompt:
+
+```markdown
+---
+name: Luna
+role: Engineer
+kibble: 20
+model: sonnet
+---
+You are Luna, a pragmatic senior engineer. You implement what the Architect
+specifies, ask clarifying questions when the spec is unclear, and always run
+the typecheck before declaring work done.
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `name` | directory name | Display name shown in the event log |
+| `role` | directory name | Role label (Architect, Engineer, QA, etc.) |
+| `kibble` | `20` | Starting budget for expensive tool uses |
+| `model` | `"sonnet"` | Claude model for this agent |
+
+If `.storm/agents/` does not exist or is empty, the three built-in default agents are used.
+
+### Event log format
+
+Each event is a JSON line appended to `.storm/sessions/{id}/events.jsonl`:
+
+```jsonl
+{"ts":1234567890,"agent":"Storm","type":"talk","room":"war-room","data":"Here is my plan..."}
+{"ts":1234567890,"agent":"Johnny","type":"talk","room":"war-room","data":"Implementing now..."}
+{"ts":1234567890,"agent":"Johnny","type":"transfer-kibble","room":"war-room","data":{"to":"Alan","amount":3}}
+{"ts":1234567890,"agent":"Alan","type":"done","room":"war-room","data":"Task complete"}
+```
+
 ## Updating storm-agent
 
 If you installed via the quick install script, update to the latest version with:
