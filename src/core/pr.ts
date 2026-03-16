@@ -1,5 +1,5 @@
 import { join } from "path";
-import { runCommand } from "../primitives/runner.js";
+import { runCommand, runCommandArgs } from "../primitives/runner.js";
 import { createPullRequest, commentOnIssue } from "./github.js";
 import type { GitHubIssue, StormConfig, AgentUsage } from "./types.js";
 import { log, formatDuration } from "./output.js";
@@ -22,17 +22,17 @@ export async function createBranch(
   cwd: string
 ): Promise<boolean> {
   // Try creating a new branch
-  const result = await runCommand(`git checkout -b "${name}"`, { cwd });
+  const result = await runCommandArgs(["git", "checkout", "-b", name], { cwd });
   if (result.exitCode === 0) return true;
 
   // Branch exists — delete it and recreate from current HEAD (base branch)
   log.info(`Branch "${name}" already exists, recreating from base`);
-  const del = await runCommand(`git branch -D "${name}"`, { cwd });
+  const del = await runCommandArgs(["git", "branch", "-D", name], { cwd });
   if (del.exitCode !== 0) {
     log.error(`Failed to delete branch: ${del.stderr}`);
     return false;
   }
-  const retry = await runCommand(`git checkout -b "${name}"`, { cwd });
+  const retry = await runCommandArgs(["git", "checkout", "-b", name], { cwd });
   if (retry.exitCode !== 0) {
     log.error(`Failed to create branch: ${retry.stderr}`);
     return false;
@@ -44,7 +44,7 @@ export async function checkoutBase(
   baseBranch: string,
   cwd: string
 ): Promise<boolean> {
-  const checkout = await runCommand(`git checkout "${baseBranch}"`, { cwd });
+  const checkout = await runCommandArgs(["git", "checkout", baseBranch], { cwd });
   if (checkout.exitCode !== 0) {
     log.error(`Failed to checkout ${baseBranch}: ${checkout.stderr}`);
     return false;
@@ -75,19 +75,13 @@ export async function commitAndPush(
   }
 
   const msg = `storm: implement #${issue.number} - ${issue.title}`;
-  const commitResult = await runCommand(
-    `git commit -m "${msg.replace(/"/g, '\\"')}"`,
-    { cwd }
-  );
+  const commitResult = await runCommandArgs(["git", "commit", "-m", msg], { cwd });
   if (commitResult.exitCode !== 0) {
     log.error(`git commit failed: ${commitResult.stderr}`);
     return false;
   }
 
-  const pushResult = await runCommand(
-    `git push -u origin "${branch}"`,
-    { cwd }
-  );
+  const pushResult = await runCommandArgs(["git", "push", "-u", "origin", branch], { cwd });
   if (pushResult.exitCode !== 0) {
     log.error(`git push failed: ${pushResult.stderr}`);
     return false;
@@ -113,12 +107,12 @@ async function buildPRDescription(
   }
 
   // Gather git stats against the base branch
-  const diffStat = await runCommand(
-    `git diff --stat "${baseBranch}"..."${branch}"`,
+  const diffStat = await runCommandArgs(
+    ["git", "diff", "--stat", `${baseBranch}...${branch}`],
     { cwd }
   );
-  const changedFilesRaw = await runCommand(
-    `git diff --name-only "${baseBranch}"..."${branch}"`,
+  const changedFilesRaw = await runCommandArgs(
+    ["git", "diff", "--name-only", `${baseBranch}...${branch}`],
     { cwd }
   );
 
